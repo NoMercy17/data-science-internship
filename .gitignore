@@ -28,13 +28,10 @@ wheels/
 
 # Data files (since you have data/ folder)
 data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+!data/raw/hotel_booking_cancellation_prediction.csv
+
 
 # Model files
-models/*
-!models/.gitkeep
 
 # Jupyter Notebook
 .ipynb_checkpoints/
