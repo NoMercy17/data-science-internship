@@ -71,7 +71,95 @@ def handle_duplicates(data):
 
 
 def handle_statistical_outliers(data):
-    pass
+    """
+    Values that are valid but extreme/mildly to big/small
+    """
+    print("\n=== Handling Statistical Outliers using IQR ===")
+
+    numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
+    outlier_summary = {}
+
+    for col in numeric_columns:
+        print(f"\n Processing {col}")
+
+        # Calculate IQR and bounds
+        Q1 = data[col].quantile(0.25)
+        Q3 = data[col].quantile(0.75)
+        IQR = Q3 - Q1
+
+        # different layers of outliers
+        mild_lower = Q1 - 1.5 * IQR
+        mild_upper = Q3 + 1.5 * IQR
+        extreme_lower = Q1 - 3 * IQR
+        extreme_upper = Q3 + 3 * IQR
+
+        # Count different types of outliers
+        all_outliers = ((data[col] < mild_lower) | (data[col] > mild_upper))
+        extreme_outliers = ((data[col] < extreme_lower) | (data[col] > extreme_upper))
+        mild_outliers = all_outliers & ~extreme_outliers  # Exclude extreme from mild cuz if a value is  > 3*IQR is also > 1.5*IQR
+
+        extreme_count = extreme_outliers.sum()
+        mild_count = mild_outliers.sum()
+        total_outliers = extreme_count + mild_count
+
+        print(f"  Extreme outliers (>3*IQR): {extreme_count}")
+        print(f"  Mild outliers (1.5-3*IQR): {mild_count}")
+        print(f"  Bounds - Mild: [{mild_lower:.2f}, {mild_upper:.2f}]")
+        print(f"  Bounds - Extreme: [{extreme_lower:.2f}, {extreme_upper:.2f}]")
+        
+        if  total_outliers:
+
+            if extreme_count:
+                print(f"Capping {extreme_count} extreme outliers to mild bounds")
+                data.loc[extreme_outliers & (data[col] < extreme_lower), col] = mild_lower
+                data.loc[extreme_outliers & (data[col] > extreme_upper), col] = mild_upper
+
+            if mild_count > 0:
+                print(f"Capping {mild_count} mild outliers to mild bounds")
+                data.loc[mild_outliers & (data[col] < mild_lower), col] = mild_lower
+                data.loc[mild_outliers & (data[col] > mild_upper), col] = mild_upper
+            
+            outlier_summary[col] = {
+                'extreme_count': extreme_count,
+                'mild_count': mild_count,
+                'total_outliers': total_outliers,
+                'extreme_bounds': (extreme_lower, extreme_upper),
+                'mild_bounds': (mild_lower, mild_upper),
+                'Q1': Q1,
+                'Q3': Q3,
+                'IQR': IQR,
+                'action': 'capped'
+            }
+        else:
+            outlier_summary[col] = {
+                'extreme_count': 0,
+                'mild_count': 0,
+                'total_outliers': 0,
+                'extreme_bounds': (extreme_lower, extreme_upper),
+                'mild_bounds': (mild_lower, mild_upper),
+                'Q1': Q1,
+                'Q3': Q3,
+                'IQR': IQR,
+                'action': 'none'
+            }
+    print("STATISTICAL OUTLIERS SUMMARY")
+    print("="*50)
+    summary_data = pd.DataFrame(outlier_summary).T
+    summary_data = summary_data[['extreme_count', 'mild_count', 'total_outliers', 'Q1', 'Q3', 'IQR']]
+    print(summary_data)
+
+    print("\nIndividual column summary:")
+    for col, info in outlier_summary.items():
+        if info['total_outliers'] > 0:
+            print(f"  {col}: {info['extreme_count']} extreme + {info['mild_count']} mild = {info['total_outliers']} total outliers capped")
+        else:
+            print(f"  {col}: No outliers found")
+    
+    return data
+
+
+handle_statistical_outliers(hotel_data)
+
 
 
 def handle_data_entry_errors(data):
