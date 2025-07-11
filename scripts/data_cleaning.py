@@ -3,7 +3,7 @@ import numpy as np
 from IPython.display import display
 #from sklearn.model_selection import train_test_split
 #from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
-from sklearn.impute import SimpleImputer
+#from sklearn.impute import SimpleImputer
 #import matplotlib.pyplot as plt
 #import seaborn as sns
 #from datetime import datetime
