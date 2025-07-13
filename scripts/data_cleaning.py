@@ -1,500 +1,519 @@
 import pandas as pd
 import numpy as np
+import os
 
-# CLEANING FUNCTIONS (Silent - RETURNS DATA)
+# Load data
+data = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/raw/hotel_booking_cancellation_prediction.csv'
+hotel_data = pd.read_csv(data)
+
+# Output directory
+output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/cleaned'
+os.makedirs(output_dir, exist_ok=True)
 
 def clean_missing_values(data):
-    """
-    Clean missing values without printing. Use this in your main EDA pipeline.
-    Modifies the DataFrame in-place and returns the same DataFrame with missing values handled.
-    """
-    drop_threshold = 0.5 
-    columns_to_drop = []
-    
-    for column in data.columns:
-        dtype = data[column].dtype
-        missing_pct = data[column].isnull().mean()
-        
-        # Drop columns with excessive missing values
-        if missing_pct > drop_threshold:
-            columns_to_drop.append(column)
-        elif np.issubdtype(dtype, np.number):  # Numeric columns
-            # Calculate median for imputation
-            median_val = data[column].median()
-            # Fill NaNs with median
-            if not pd.isna(median_val):
-                data[column].fillna(median_val, inplace=True)
-        else:  # Categorical columns
-            if not data[column].empty and data[column].notna().any():
-                mode_values = data[column].mode()
-                if len(mode_values) > 0:
-                    mode_val = mode_values[0]
-                    data[column].fillna(mode_val, inplace=True)
+    """1. Clean missing values and save result"""
+    drop_threshold = 0.5
     
     # Drop columns with excessive missing values
+    columns_to_drop = [col for col in data.columns if data[col].isnull().mean() > drop_threshold]
     if columns_to_drop:
-        data.drop(columns_to_drop, axis=1, inplace=True)
+        data = data.drop(columns=columns_to_drop)
+        print(f"Dropped {len(columns_to_drop)} columns with >50% missing values: {columns_to_drop}")
+    
+    # Fill missing values
+    fill_values = {}
+    for column in data.columns:
+        if data[column].isnull().any():
+            if np.issubdtype(data[column].dtype, np.number):
+                median_val = data[column].median()
+                if not pd.isna(median_val):
+                    fill_values[column] = median_val
+            else:
+                if not data[column].empty and data[column].notna().any():
+                    mode_values = data[column].mode()
+                    if len(mode_values) > 0:
+                        fill_values[column] = mode_values[0]
+    
+    if fill_values:
+        data = data.fillna(fill_values)
+        print(f"Filled missing values in {len(fill_values)} columns")
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '01_missing_values_cleaned.csv')
+    data.to_csv(output_path, index=False)
     
     return data
 
 def clean_duplicates(data):
-    """Clean duplicate rows without printing."""
-    nr_duplicates = data.duplicated().sum()
-    if nr_duplicates: 
-        data = data.drop_duplicates()
+    """2. Clean duplicate rows and save result"""
+    original_shape = data.shape[0]
+    data = data.drop_duplicates()
+    removed_duplicates = original_shape - data.shape[0]
+    
+    if removed_duplicates > 0:
+        print(f"Removed {removed_duplicates} duplicate rows")
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '02_duplicates_cleaned.csv')
+    data.to_csv(output_path, index=False)
+    
     return data
 
 def clean_statistical_outliers(data):
-    """
-    Clean statistical outliers by capping extreme values to mild bounds.
-    Values that are valid but extreme/mildly too big/small.
-    """
+    """3. Clean statistical outliers (extreme/mild) and save result"""
     numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
     
     for col in numeric_columns:
-        # Calculate IQR and bounds
+        original_dtype = data[col].dtype
+        
         Q1 = data[col].quantile(0.25)
         Q3 = data[col].quantile(0.75)
         IQR = Q3 - Q1
         
-        # Different layers of outliers
         mild_lower = Q1 - 1.5 * IQR
         mild_upper = Q3 + 1.5 * IQR
         extreme_lower = Q1 - 3 * IQR
         extreme_upper = Q3 + 3 * IQR
         
-        # Count different types of outliers
         all_outliers = ((data[col] < mild_lower) | (data[col] > mild_upper))
         extreme_outliers = ((data[col] < extreme_lower) | (data[col] > extreme_upper))
         mild_outliers = all_outliers & ~extreme_outliers
         
-        extreme_count = extreme_outliers.sum()
-        mild_count = mild_outliers.sum()
-        total_outliers = extreme_count + mild_count
-        
-        if total_outliers:
-            if extreme_count:
+        if (extreme_outliers.sum() + mild_outliers.sum()) > 0:
+            if pd.api.types.is_integer_dtype(original_dtype):
+                data[col] = data[col].astype('float64')
+            
+            if extreme_outliers.sum() > 0:
                 data.loc[extreme_outliers & (data[col] < extreme_lower), col] = mild_lower
                 data.loc[extreme_outliers & (data[col] > extreme_upper), col] = mild_upper
-            if mild_count > 0:
+                print(f"Capped {extreme_outliers.sum()} extreme outliers in {col}")
+                
+            if mild_outliers.sum() > 0:
                 data.loc[mild_outliers & (data[col] < mild_lower), col] = mild_lower
                 data.loc[mild_outliers & (data[col] > mild_upper), col] = mild_upper
+                print(f"Capped {mild_outliers.sum()} mild outliers in {col}")
+            
+            if pd.api.types.is_integer_dtype(original_dtype):
+                data[col] = data[col].round().astype(original_dtype)
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '03_statistical_outliers_cleaned.csv')
+    data.to_csv(output_path, index=False)
     
     return data
 
 def clean_data_errors_and_logical(data):
-    """
-    Function to fix data quality issues, data entry errors + logical errors
-    """
+    """4. Clean data errors and logical inconsistencies and save result"""
     
-    # Define columns that should not have negative values
-    non_negative_columns = [
-        'adults', 'children', 'babies', 'adr', 'previous_cancellations',
-        'previous_bookings_not_canceled', 'booking_changes', 'days_in_waiting_list',
-        'required_car_parking_spaces', 'total_of_special_requests'
-    ]
-    
-    # Handle duplicate columns issue (stays_in_weeks_nights vs stays_in_week_nights)
+    # Handle duplicate columns
     if 'stays_in_weeks_nights' in data.columns and 'stays_in_week_nights' in data.columns:
         if data['stays_in_weeks_nights'].equals(data['stays_in_week_nights']):
             data.drop('stays_in_weeks_nights', axis=1, inplace=True)
+            print("Removed duplicate column 'stays_in_weeks_nights'")
     
-    # Remove the unnamed index column
+    # Remove unnamed index column
     if 'Unnamed: 0' in data.columns:
         data.drop('Unnamed: 0', axis=1, inplace=True)
+        print("Removed 'Unnamed: 0' column")
     
-    # Remove bookings with 0 total guests (impossible booking)
+    # Remove bookings with 0 total guests
     if all(col in data.columns for col in ['adults', 'children', 'babies']):
+        original_count = len(data)
         mask = (data["adults"] + data["children"] + data["babies"]) > 0
-        data.drop(data[~mask].index, inplace=True)
+        data = data[mask]
+        removed_count = original_count - len(data)
+        if removed_count > 0:
+            print(f"Removed {removed_count} bookings with 0 total guests")
     
-    # Set negative lead time to 0 (could be same-day booking)
+    # Fix negative lead time
     if 'lead_time' in data.columns:
-        negative_lead_mask = data['lead_time'] < 0
-        if negative_lead_mask.any():
-            data.loc[negative_lead_mask, 'lead_time'] = 0
+        negative_count = (data['lead_time'] < 0).sum()
+        if negative_count > 0:
+            data.loc[data['lead_time'] < 0, 'lead_time'] = 0
+            print(f"Fixed {negative_count} negative lead time values")
     
-    # Fix invalid repeated guest values (set to 0, not a repeated guest)
+    # Fix invalid repeated guest values
     if 'is_repeated_guest' in data.columns:
-        invalid_mask = ~data['is_repeated_guest'].isin([0, 1])
-        if invalid_mask.any():
-            data.loc[invalid_mask, 'is_repeated_guest'] = 0
+        invalid_count = (~data['is_repeated_guest'].isin([0, 1])).sum()
+        if invalid_count > 0:
+            data.loc[~data['is_repeated_guest'].isin([0, 1]), 'is_repeated_guest'] = 0
+            print(f"Fixed {invalid_count} invalid repeated guest values")
     
     # Handle date-related logical issues
     date_columns = ['arrival_date_year', 'arrival_date_month', 'arrival_date_day_of_month']
     if all(col in data.columns for col in date_columns):
-        invalid_years = (data['arrival_date_year'] < 2010) | (data['arrival_date_year'] > 2035)
-        if invalid_years.any():
-            data.drop(data[invalid_years].index, inplace=True)
-        
-        invalid_days = (data['arrival_date_day_of_month'] < 1) | (data['arrival_date_day_of_month'] > 31)
-        if invalid_days.any():
-            data.drop(data[invalid_days].index, inplace=True)
+        original_count = len(data)
+        data = data[(data['arrival_date_year'] >= 2010) & (data['arrival_date_year'] <= 2035)]
+        data = data[(data['arrival_date_day_of_month'] >= 1) & (data['arrival_date_day_of_month'] <= 31)]
+        removed_count = original_count - len(data)
+        if removed_count > 0:
+            print(f"Removed {removed_count} rows with invalid dates")
     
-    # Handle agent and company ID issues (NaN is OK)
+    # Handle negative agent and company IDs
     for col in ['agent', 'company']:
         if col in data.columns:
-            negative_mask = data[col] < 0
-            if negative_mask.any():
-                data.loc[negative_mask, col] = float('nan')
+            negative_count = (data[col] < 0).sum()
+            if negative_count > 0:
+                data.loc[data[col] < 0, col] = float('nan')
+                print(f"Set {negative_count} negative {col} IDs to NaN")
     
     # Handle week number
     if 'arrival_date_week_number' in data.columns:
-        invalid_weeks = (data['arrival_date_week_number'] < 1) | (data['arrival_date_week_number'] > 52)
-        if invalid_weeks.any():
-            data.drop(data[invalid_weeks].index, inplace=True)
+        original_count = len(data)
+        data = data[(data['arrival_date_week_number'] >= 1) & (data['arrival_date_week_number'] <= 52)]
+        removed_count = original_count - len(data)
+        if removed_count > 0:
+            print(f"Removed {removed_count} rows with invalid week numbers")
     
-    # Handle extreme ADR values 
+    # Handle extreme ADR values
     if 'adr' in data.columns:
-        extreme_adr_mask = data['adr'] > 1000  
-        if extreme_adr_mask.any():
-            data.drop(data[extreme_adr_mask].index, inplace=True)
+        original_count = len(data)
+        data = data[data['adr'] <= 1000]
+        removed_count = original_count - len(data)
+        if removed_count > 0:
+            print(f"Removed {removed_count} rows with ADR > 1000")
     
-    # Handle negative values in non-negative columns
-    for col in non_negative_columns:
-        if col in data.columns:
-            negative_mask = data[col] < 0
-            if negative_mask.any():
-                if col in ['adults', 'children', 'babies', 'adr']:
-                    # For guest counts and ADR, remove the entire booking 
-                    data.drop(data[negative_mask].index, inplace=True)
-                else:
-                    # For other columns, value = 0
-                    data.loc[negative_mask, col] = 0
-    
-    return data
-
-def handle_context_dependent_outliers(data):
-    """Placeholder for context-dependent outlier handling"""
-    return data
-
-def handle_infrequent_categories(data):
-    """Placeholder for infrequent category handling"""
-    return data
-
-def handle_target_leakage_outliers(data):
-    """Placeholder for target leakage outlier handling"""
-    return data
-
-
-# ANALYSIS FUNCTIONS (PRINTS)
-
-def analyze_missing_values(data):
-    """
-    Analyze and print detailed information about missing values.
-    Use this for exploration and understanding your data.
-    """
-    print("\n=== MISSING VALUES ANALYSIS ===")
-    drop_threshold = 0.5
-    columns_dropped = []
-    columns_processed = []
-    
-    for column in data.columns:
-        print(f"\nProcessing column: {column}")
-        
-        dtype = data[column].dtype
-        missing_count = data[column].isnull().sum()
-        missing_pct = data[column].isnull().mean()
-        
-        print(f"Data type: {dtype}")
-        print(f"Missing values: {missing_count} ({missing_pct:.1%})")
-        
-        # For numeric columns, show additional stats
-        if np.issubdtype(dtype, np.number):
-            zero_count = (data[column] == 0).sum()
-            print(f"Zeros count: {zero_count}")
-            if not data[column].empty and data[column].notna().any():
-                print(f"Stats: mean={data[column].mean():.2f}, median={data[column].median():.2f}")
-        
-        # Check what would happen to this column
-        if missing_pct > drop_threshold:
-            print(f"WOULD DROP COLUMN '{column}' (over {drop_threshold*100:.0f}% missing values)")
-            columns_dropped.append(column)
-        elif np.issubdtype(dtype, np.number):  # Numeric columns
-            median_val = data[column].median()
-            if not pd.isna(median_val):
-                print(f"Would fill {missing_count} missing values with median: {median_val:.2f}")
-            columns_processed.append(column)
-        else:  # Categorical columns
-            if not data[column].empty and data[column].notna().any():
-                mode_values = data[column].mode()
-                if len(mode_values) > 0:
-                    mode_val = mode_values[0]
-                    print(f"Would fill {missing_count} missing values with mode: {mode_val}")
-                columns_processed.append(column)
-            else:
-                print(f"Warning: Could not determine mode for column '{column}'")
-    
-    print(f"\nColumns processed: {len(columns_processed)}")
-    print(f"Columns dropped: {len(columns_dropped)}")
-    if columns_dropped:
-        print(f"Dropped columns: {columns_dropped}")
-
-def analyze_duplicates(data):
-    """Analyze and print information about duplicate rows."""
-    print("\n=== DUPLICATE ANALYSIS ===")
-    nr_duplicates = data.duplicated().sum()
-    print(f"Number of duplicate rows: {nr_duplicates}")
-    if nr_duplicates: 
-        print(f"Duplicates would be removed. New shape would be: {data.drop_duplicates().shape}")
-    else:
-        print("No duplicates found.")
-
-def analyze_statistical_outliers(data):
-    """
-    Analyze and print information about statistical outliers using IQR method.
-    """
-    print("\n=== Analyzing Extreme/Mildly Outliers using IQR ===")
-    
-    numeric_columns = data.select_dtypes(include=[np.number]).columns.tolist()
-    outlier_summary = {}
-    
-    for col in numeric_columns:
-        print(f"\n Processing {col}")
-        
-        # Calculate IQR and bounds
-        Q1 = data[col].quantile(0.25)
-        Q3 = data[col].quantile(0.75)
-        IQR = Q3 - Q1
-        
-        # Different layers of outliers
-        mild_lower = Q1 - 1.5 * IQR
-        mild_upper = Q3 + 1.5 * IQR
-        extreme_lower = Q1 - 3 * IQR
-        extreme_upper = Q3 + 3 * IQR
-        
-        # Count different types of outliers
-        all_outliers = ((data[col] < mild_lower) | (data[col] > mild_upper))
-        extreme_outliers = ((data[col] < extreme_lower) | (data[col] > extreme_upper))
-        mild_outliers = all_outliers & ~extreme_outliers
-        
-        extreme_count = extreme_outliers.sum()
-        mild_count = mild_outliers.sum()
-        total_outliers = extreme_count + mild_count
-        
-        print(f"  Extreme outliers (>3*IQR): {extreme_count}")
-        print(f"  Mild outliers (1.5-3*IQR): {mild_count}")
-        print(f"  Bounds - Mild: [{mild_lower:.2f}, {mild_upper:.2f}]")
-        print(f"  Bounds - Extreme: [{extreme_lower:.2f}, {extreme_upper:.2f}]")
-        
-        outlier_summary[col] = {
-            'extreme_count': extreme_count,
-            'mild_count': mild_count,
-            'total_outliers': total_outliers,
-            'extreme_bounds': (extreme_lower, extreme_upper),
-            'mild_bounds': (mild_lower, mild_upper),
-            'Q1': Q1,
-            'Q3': Q3,
-            'IQR': IQR,
-            'action': 'analyzed'
-        }
-    
-    print("\nSTATISTICAL OUTLIERS SUMMARY")
-    print("="*50)
-    summary_data = pd.DataFrame(outlier_summary).T
-    summary_data = summary_data[['extreme_count', 'mild_count', 'total_outliers', 'Q1', 'Q3', 'IQR']]
-    print(summary_data)
-    
-    print("\nIndividual column summary:")
-    for col, info in outlier_summary.items():
-        if info['total_outliers'] > 0:
-            print(f"  {col}: {info['extreme_count']} extreme + {info['mild_count']} mild = {info['total_outliers']} total outliers found")
-        else:
-            print(f"  {col}: No outliers found")
-
-def analyze_data_errors_and_logical(data):
-    """
-    Function to detect and report data errors and logical issues 
-    """
-    print("\n=== DATA QUALITY DETECTION REPORT ===")
-    logical_errors = {}
-    
-    print(f"Dataset size: {len(data)}")
-    
-    required_logical_columns = [
-        "adults", "children", "babies", "stays_in_weekend_nights", 
-        "stays_in_week_nights", "lead_time", "is_repeated_guest", "adr",
-        "arrival_date_year", "arrival_date_month", "arrival_date_day_of_month"
-    ]
-    
-    check_for_wrong_columns = list(set(required_logical_columns) - set(data.columns))
-    if check_for_wrong_columns:
-        print(f"Warning: Missing columns for logical error detection: {check_for_wrong_columns}")
-
-    print("\n📊 Logical Constraints")
-    print("-" * 30)
-    
-    # Total guests > 0
-    if all(col in data.columns for col in ['adults', 'children', 'babies']):
-        zero_guests = data[(data["adults"] + data["children"] + data["babies"]) == 0]
-        logical_errors['zero_guests'] = len(zero_guests)
-        print(f"Bookings with 0 total guests: {len(zero_guests)}")
-
-    # Stay duration > 0
-    if all(col in data.columns for col in ['stays_in_weekend_nights', 'stays_in_week_nights']):
-        zero_nights = data[(data["stays_in_weekend_nights"] + data["stays_in_week_nights"]) == 0]
-        logical_errors['zero_nights'] = len(zero_nights)
-        print(f"Bookings with 0 nights stay: {len(zero_nights)}")
-
-    # Lead time >= 0
-    if 'lead_time' in data.columns:
-        negative_lead = data[data["lead_time"] < 0]
-        logical_errors['negative_lead_time'] = len(negative_lead)
-        print(f"Bookings with negative lead time: {len(negative_lead)}")
-
-    # Valid repeated guest values (0 or 1)
-    if 'is_repeated_guest' in data.columns:
-        invalid_repeated = data[~data['is_repeated_guest'].isin([0, 1])]
-        logical_errors['invalid_repeated_guest'] = len(invalid_repeated)
-        print(f"Invalid is_repeated_guest values: {len(invalid_repeated)}")
-
-    print("\n📊 Additional Hotel-Specific Checks")
-    print("-" * 30)
-    
-    # Check for impossible date combinations
-    if 'arrival_date_day_of_month' in data.columns:
-        invalid_days = data[(data['arrival_date_day_of_month'] < 1) | (data['arrival_date_day_of_month'] > 31)]
-        logical_errors['invalid_days'] = len(invalid_days)
-        print(f"Bookings with invalid day of month: {len(invalid_days)}")
-    
-    # impossible week numbers
-    if 'arrival_date_week_number' in data.columns:
-        invalid_weeks = data[(data['arrival_date_week_number'] < 1) | (data['arrival_date_week_number'] > 53)]
-        logical_errors['invalid_weeks'] = len(invalid_weeks)
-        print(f"Bookings with invalid week numbers: {len(invalid_weeks)}")
-    
-    # unrealistic years
-    if 'arrival_date_year' in data.columns:
-        invalid_years = data[(data['arrival_date_year'] < 2010) | (data['arrival_date_year'] > 2025)]
-        logical_errors['invalid_years'] = len(invalid_years)
-        print(f"Bookings with unrealistic years: {len(invalid_years)}")
-    
-    # high ADR 
-    if 'adr' in data.columns:
-        extreme_adr = data[data['adr'] > 2000]  
-        logical_errors['extreme_adr'] = len(extreme_adr)
-        print(f"Bookings with extremely high ADR (>$5000): {len(extreme_adr)}")
-    
-    # Check for inconsistent stay duration 
-    if all(col in data.columns for col in ['stays_in_weeks_nights', 'stays_in_week_nights']):
-        inconsistent_stays = data[data['stays_in_weeks_nights'] != data['stays_in_week_nights']]
-        logical_errors['inconsistent_stay_columns'] = len(inconsistent_stays)
-        print(f"Bookings with inconsistent stay duration columns: {len(inconsistent_stays)}")
-    
-    if 'Unnamed: 0' in data.columns:
-        logical_errors['unnecessary_index_column'] = 1
-        print("Found unnecessary 'Unnamed: 0' column (should be removed)")
-    
-    # Check agent/company negative IDs
-    for col in ['agent', 'company']:
-        if col in data.columns:
-            negative_ids = data[data[col] < 0]
-            logical_errors[f'negative_{col}_ids'] = len(negative_ids)
-            print(f"Bookings with negative {col} IDs: {len(negative_ids)}")
-
-    print("\n📊 Impossible Values")
-    print("-" * 30)
-    
+    # Handle negative values in specific columns
     non_negative_columns = [
         'adults', 'children', 'babies', 'adr', 'previous_cancellations',
         'previous_bookings_not_canceled', 'booking_changes', 'days_in_waiting_list',
         'required_car_parking_spaces', 'total_of_special_requests'
     ]
-
-    # Check for negative values in non-negative columns
+    
     for col in non_negative_columns:
         if col in data.columns:
-            negative_values = data[data[col] < 0]
-            logical_errors[f'negative_{col}'] = len(negative_values)
-            print(f"Bookings with negative {col}: {len(negative_values)}")
-
-    # Summary of detection
-    print("\n📋 DETECTION SUMMARY")
-    print("-" * 30)
-    total_errors = sum(logical_errors.values())
-    print(f"Total logical errors found: {total_errors}")
-
-    if total_errors > 0:
-        print("\nDetailed breakdown:")
-        for error_type, count in logical_errors.items():
-            if count > 0:
-                print(f"  {error_type}: {count} records")
-    else:
-        print("No logical errors detected!")
-
-
-# PIPELINE FUNCTIONS
-
-def clean_outliers(data):
-    """Pipeline for comprehensive outlier handling"""
-    print("Starting Comprehensive Outlier Handling")
-    print("=" * 50)
-    original_shape = data.shape
-    print(f"Original data shape: {original_shape}")
-
+            if col in ['adults', 'children', 'babies', 'adr']:
+                original_count = len(data)
+                data = data[data[col] >= 0]
+                removed_count = original_count - len(data)
+                if removed_count > 0:
+                    print(f"Removed {removed_count} rows with negative {col}")
+            else:
+                negative_count = (data[col] < 0).sum()
+                if negative_count > 0:
+                    data.loc[data[col] < 0, col] = 0
+                    print(f"Set {negative_count} negative {col} values to 0")
     
-    print("\n" + "="*60)
-    print("STEP 1: Cleaning Statistical Outliers")
-    data = clean_statistical_outliers(data)
-    print(f"After statistical outlier cleaning: {data.shape}")
-
+    # Reset index after row deletions
+    data = data.reset_index(drop=True)
     
-    print("\n" + "="*60)
-    print("STEP 2: Cleaning Data Errors and Logical Issues")
-    data = clean_data_errors_and_logical(data)
-    print(f"After data error cleaning: {data.shape}")
-
-    
-    print("\n" + "="*60)
-    print("STEP 3: Handling Context-Dependent Outliers")
-    data = handle_context_dependent_outliers(data)
-    print(f"After context-dependent outlier handling: {data.shape}")
-
-   
-    print("\n" + "="*60)
-    print("STEP 4: Handling Infrequent Categories")
-    data = handle_infrequent_categories(data)
-    print(f"After infrequent category handling: {data.shape}")
-
-    
-    print("\n" + "="*60)
-    print("STEP 5: Handling Target Leakage Outliers")
-    data = handle_target_leakage_outliers(data)
-    print(f"After target leakage outlier handling: {data.shape}")
-
-    print(f"\nFinal shape: {data.shape}")
-    print(f"Rows removed: {original_shape[0] - data.shape[0]}")
+    # Save to file
+    output_path = os.path.join(output_dir, '04_data_errors_cleaned.csv')
+    data.to_csv(output_path, index=False)
     
     return data
 
+def clean_infrequent_values(data):
+    """5. Clean infrequent/extreme values based on business logic and save result"""
+    
+    print("Cleaning infrequent values...")
+    
+    # Cap extreme values in continuous variables
+    # Days in waiting list
+    if 'days_in_waiting_list' in data.columns:
+        current_max = data['days_in_waiting_list'].max()
+        if current_max > 300:
+            cap_value = data['days_in_waiting_list'].quantile(0.95)
+            mask = data['days_in_waiting_list'] > cap_value
+            if mask.sum() > 0:
+                data.loc[mask, 'days_in_waiting_list'] = cap_value
+                print(f"Capped {mask.sum()} extreme values in days_in_waiting_list at 95th percentile ({cap_value})")
+    
+    # Lead time  
+    if 'lead_time' in data.columns:
+        current_max = data['lead_time'].max()
+        if current_max > 300:  
+            cap_value = data['lead_time'].quantile(0.95)
+            mask = data['lead_time'] > cap_value
+            if mask.sum() > 0:
+                data.loc[mask, 'lead_time'] = cap_value
+                print(f"Capped {mask.sum()} extreme values in lead_time at 95th percentile ({cap_value})")
+    
+    # Previous cancellations
+    if 'previous_cancellations' in data.columns:
+        current_max = data['previous_cancellations'].max()
+        if current_max > 20: 
+            cap_value = data['previous_cancellations'].quantile(0.95)
+            mask = data['previous_cancellations'] > cap_value
+            if mask.sum() > 0:
+                data.loc[mask, 'previous_cancellations'] = cap_value
+                print(f"Capped {mask.sum()} extreme values in previous_cancellations at 95th percentile ({cap_value})")
+    
+    # Handle categorical columns with too many infrequent categories
+    categorical_columns_to_clean = ['country', 'agent']  
+    
+    for col in categorical_columns_to_clean:
+        if col in data.columns:
+            if col == 'country':
+                # Group infrequent countries into 'Other'
+                min_frequency = len(data) * 0.001  # 0.1% threshold
+                value_counts = data[col].value_counts()
+                frequent_countries = value_counts[value_counts >= min_frequency].index
+                mask = ~data[col].isin(frequent_countries)
+                if mask.sum() > 0:
+                    data.loc[mask, col] = 'Other'
+                    print(f"Grouped {mask.sum()} infrequent countries into 'Other' category")
+            
+            elif col == 'agent':
+                # For agent IDs, set infrequent ones to NaN
+                if data[col].notna().sum() > 0:
+                    value_counts = data[col].value_counts()
+                    cumulative_freq = value_counts.cumsum() / value_counts.sum()
+                    frequent_values = cumulative_freq[cumulative_freq <= 0.95].index
+                    mask = data[col].notna() & ~data[col].isin(frequent_values)
+                    if mask.sum() > 0:
+                        data.loc[mask, col] = np.nan
+                        print(f"Set {mask.sum()} infrequent values in {col} to NaN")
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '05_infrequent_values_cleaned.csv')
+    data.to_csv(output_path, index=False)
+    
+    return data
 
+def clean_context_dependent_outliers(data):
+    """6. Clean context-dependent outliers and save result"""
+    
+    print("Cleaning context-dependent outliers...")
+    
+    # High ADR in budget segments
+    if 'adr' in data.columns and 'market_segment' in data.columns:
+        budget_segments = ['Online TA', 'Groups']
+        for segment in budget_segments:
+            if segment in data['market_segment'].values:
+                segment_data = data[data['market_segment'] == segment]
+                if len(segment_data) > 0:
+                    high_adr_threshold = segment_data['adr'].quantile(0.95)
+                    high_adr_mask = (data['market_segment'] == segment) & (data['adr'] > high_adr_threshold)
+                    affected_count = high_adr_mask.sum()
+                    if affected_count > 0:
+                        data.loc[high_adr_mask, 'adr'] = high_adr_threshold
+                        print(f"Capped {affected_count} high ADR values in {segment} segment")
+    
+    # Walk-in bookings with deposit requirements
+    if 'lead_time' in data.columns and 'deposit_type' in data.columns:
+        walk_in_with_deposit = (data['lead_time'] == 0) & (data['deposit_type'] != 'No Deposit')
+        affected_count = walk_in_with_deposit.sum()
+        if affected_count > 0:
+            data.loc[walk_in_with_deposit, 'deposit_type'] = 'No Deposit'
+            print(f"Fixed {affected_count} walk-in bookings with deposit requirements")
+    
+    # Previous cancellations but not marked as repeated guest
+    if all(col in data.columns for col in ['previous_cancellations', 'is_repeated_guest']):
+        prev_cancel_not_repeat = (data['previous_cancellations'] > 0) & (data['is_repeated_guest'] == 0)
+        affected_count = prev_cancel_not_repeat.sum()
+        if affected_count > 0:
+            data.loc[prev_cancel_not_repeat, 'is_repeated_guest'] = 1
+            print(f"Fixed {affected_count} guests with previous cancellations not marked as repeated")
+    
+    # Parking spaces exceed adults
+    if all(col in data.columns for col in ['required_car_parking_spaces', 'adults']):
+        parking_exceeds_adults = data['required_car_parking_spaces'] > data['adults']
+        affected_count = parking_exceeds_adults.sum()
+        if affected_count > 0:
+            data.loc[parking_exceeds_adults, 'required_car_parking_spaces'] = data.loc[parking_exceeds_adults, 'adults']
+            print(f"Fixed {affected_count} bookings where parking spaces exceeded adults")
+    
+    # Booking changes exceed lead time
+    if 'booking_changes' in data.columns and 'lead_time' in data.columns:
+        changes_exceed_lead = (data['booking_changes'] > data['lead_time']) & (data['lead_time'] > 0)
+        affected_count = changes_exceed_lead.sum()
+        if affected_count > 0:
+            data.loc[changes_exceed_lead, 'booking_changes'] = data.loc[changes_exceed_lead, 'lead_time']
+            print(f"Fixed {affected_count} bookings where changes exceeded lead time")
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '06_context_outliers_cleaned.csv')
+    data.to_csv(output_path, index=False)
+    
+    return data
 
-def clean_data(data):
-    """Main cleaning pipeline"""
-    print("Starting Data Cleaning Pipeline")
-    print("=" * 50)
-    original_shape = data.shape
-    print(f"Original data shape: {original_shape}")
+def clean_dtypes(data):
+    """7. Handle data types and save result"""
     
-    # Step 1: Clean missing values
-    print("\n" + "="*60)
-    print("STEP 1: Cleaning Missing Values")
-    data = clean_missing_values(data)
-    print(f"After missing value cleaning: {data.shape}")
+    print("Cleaning data types...")
     
-    # Step 2: Clean duplicates
-    print("\n" + "="*60)
-    print("STEP 2: Cleaning Duplicates")
-    data = clean_duplicates(data)
-    print(f"After duplicate cleaning: {data.shape}")
+    # Handle date-related columns
+    if 'arrival_date_month' in data.columns:
+        data['arrival_date_month'] = data['arrival_date_month'].str.title()
     
-    # Step 3: Clean outliers (comprehensive)
-    print("\n" + "="*60)
-    print("STEP 3: Comprehensive Outlier Cleaning")
-    data = clean_outliers(data)
-    print(f"After outlier cleaning: {data.shape}")
+    # Handle reservation_status_date
+    if 'reservation_status_date' in data.columns:
+        data['reservation_status_date'] = pd.to_datetime(data['reservation_status_date'], errors='coerce')
     
-    print(f"\nFinal cleaned data shape: {data.shape}")
-    print(f"Total rows removed: {original_shape[0] - data.shape[0]}")
+    # Binary columns
+    binary_columns = ['is_repeated_guest', 'is_canceled']
+    for col in binary_columns:
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype('int8')
+    
+    # Categorical columns
+    categorical_columns = {
+        'hotel': lambda x: x.str.title(),
+        'meal': lambda x: x.str.upper(),
+        'country': lambda x: x.str.upper(),
+        'market_segment': lambda x: x,
+        'distribution_channel': lambda x: x,
+        'reserved_room_type': lambda x: x.str.upper(),
+        'assigned_room_type': lambda x: x.str.upper(),
+        'deposit_type': lambda x: x.str.title(),
+        'customer_type': lambda x: x.str.title(),
+        'reservation_status': lambda x: x.str.title()
+    }
+    
+    for col, transform_func in categorical_columns.items():
+        if col in data.columns:
+            data[col] = transform_func(data[col])
+    
+    # Integer columns
+    integer_columns = [
+        'lead_time', 'arrival_date_year', 'arrival_date_week_number', 'arrival_date_day_of_month',
+        'stays_in_weekend_nights', 'stays_in_week_nights', 'adults', 'children', 'babies',
+        'previous_cancellations', 'previous_bookings_not_canceled', 'booking_changes',
+        'days_in_waiting_list', 'required_car_parking_spaces', 'total_of_special_requests'
+    ]
+    
+    for col in integer_columns:
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype('int64')
+    
+    # Float columns
+    float_columns = ['adr']
+    for col in float_columns:
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors='coerce').astype('float64')
+    
+    # Nullable integer columns
+    nullable_int_columns = ['agent', 'company']
+    for col in nullable_int_columns:
+        if col in data.columns:
+            numeric_series = pd.to_numeric(data[col], errors='coerce')
+            non_null_mask = numeric_series.notna()
+            if non_null_mask.any():
+                numeric_series.loc[non_null_mask] = numeric_series.loc[non_null_mask].round()
+            
+            try:
+                data[col] = numeric_series.astype('Int64')
+            except (TypeError, ValueError) as e:
+                print(f"Warning: Could not convert {col} to Int64, keeping as float64. Error: {e}")
+                data[col] = numeric_series.astype('float64')
+    
+    # Convert to category for memory efficiency
+    category_columns = ['hotel', 'meal', 'country', 'market_segment', 'distribution_channel',
+                       'reserved_room_type', 'assigned_room_type', 'deposit_type',
+                       'customer_type', 'reservation_status']
+    for col in category_columns:
+        if col in data.columns:
+            data[col] = data[col].astype('category')
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '07_dtypes_cleaned.csv')
+    data.to_csv(output_path, index=False)
+    
+    return data
+
+def clean_target_leakage(data):
+    """8. Detect and remove columns that have perfect correlation with target variable (is_canceled)"""
+    
+    print("Detecting target leakage...")
+    
+    if 'is_canceled' not in data.columns:
+        print("Warning: Target variable 'is_canceled' not found in data")
+        output_path = os.path.join(output_dir, '08_target_leakage_cleaned.csv')
+        data.to_csv(output_path, index=False)
+        return data
+    
+    target = data['is_canceled']
+    columns_to_remove = []
+    
+    # Check each column for perfect correlation with target
+    for col in data.columns:
+        if col == 'is_canceled':
+            continue
+            
+        try:
+            # Get dtype as string to handle all pandas dtypes safely
+            dtype_str = str(data[col].dtype)
+            
+            # For numerical columns (including nullable integers)
+            if (dtype_str in ['int64', 'float64', 'Int64', 'Float64'] or 
+                any(num_type in dtype_str.lower() for num_type in ['int', 'float'])):
+                
+                # Handle missing values by filling with a neutral value
+                col_filled = data[col].fillna(data[col].median() if data[col].notna().any() else 0)
+                
+                # Convert to float64 to ensure compatibility with corrcoef
+                col_filled = col_filled.astype('float64')
+                target_filled = target.astype('float64')
+                
+                # Skip if all values are the same (would cause division by zero)
+                if col_filled.std() == 0:
+                    print(f"Skipping {col} - all values are identical")
+                    continue
+                    
+                correlation = np.corrcoef(col_filled, target_filled)[0, 1]
+                
+                # Check for perfect correlation (both exact and floating point precision)
+                if not np.isnan(correlation) and (abs(correlation) == 1.0 or abs(correlation) > 0.999):
+                    columns_to_remove.append(col)
+                    print(f"Found perfect correlation ({correlation:.6f}) between {col} and target")
+            
+            # For categorical columns
+            elif 'category' in dtype_str.lower() or dtype_str == 'object':
+                # Check if there's a perfect one-to-one mapping
+                if data[col].notna().sum() > 0:
+                    # Group by categorical column and calculate mean target for each category
+                    grouped = data.groupby(data[col].astype(str), dropna=False)['is_canceled'].agg(['mean', 'count'])
+                    
+                    # If mean is 0.0 or 1.0, it means ALL instances of that 
+                    # category have the same target value (perfect predictability)
+                    perfect_mapping = grouped['mean'].isin([0.0, 1.0]).all()
+                    
+                    # Also check if the mapping is deterministic in both directions
+                    if perfect_mapping:
+                        # Check if each target value maps to unique categories
+                        reverse_grouped = data.groupby('is_canceled')[col].nunique()
+                        total_unique_values = data[col].nunique()
+                        
+                        # If sum of unique values per target class equals 
+                        # total unique values, there's no overlap (perfect separation)
+                        if reverse_grouped.sum() == total_unique_values:
+                            columns_to_remove.append(col)
+                            print(f"Found perfect categorical mapping between {col} and target")
+            
+            # Special check for reservation_status which is likely to be leaky
+            if col == 'reservation_status':
+                # Check if 'Canceled' status perfectly predicts cancellation
+                unique_values = data[col].astype(str).unique()
+                if any('cancel' in str(val).lower() for val in unique_values):
+                    # Find the canceled status value
+                    canceled_values = [val for val in unique_values if 'cancel' in str(val).lower()]
+                    
+                    for canceled_val in canceled_values:
+                        canceled_status_mask = data[col].astype(str) == str(canceled_val)
+                        if canceled_status_mask.sum() > 0:
+                            # Check if all 'Canceled' reservations have is_canceled = 1
+                            if (data.loc[canceled_status_mask, 'is_canceled'] == 1).all():
+                                # And check if all is_canceled = 1 have 'Canceled' status
+                                canceled_target_mask = data['is_canceled'] == 1
+                                if (data.loc[canceled_target_mask, col].astype(str) == str(canceled_val)).all():
+                                    columns_to_remove.append(col)
+                                    print(f"Found perfect leakage in {col} - '{canceled_val}' status perfectly predicts target")
+                                    break
+        
+        except Exception as e:
+            print(f"Warning: Could not check correlation for column {col}: {e}")
+            continue
+    
+    # Remove leaky columns
+    if columns_to_remove:
+        data = data.drop(columns=columns_to_remove)
+        print(f"Removed {len(columns_to_remove)} columns with target leakage: {columns_to_remove}")
+    else:
+        print("No columns with perfect target correlation found")
+    
+    # Save to file
+    output_path = os.path.join(output_dir, '08_target_leakage_cleaned.csv')
+    data.to_csv(output_path, index=False)
     
     return data
