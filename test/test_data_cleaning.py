@@ -1,4 +1,6 @@
-from scripts.data_cleaning import *
+import os
+from scripts.data_cleaning import hotel_data,output_dir
+from scripts.data_cleaning import clean_missing_values,clean_duplicates,clean_statistical_outliers, clean_data_errors_and_logical, clean_infrequent_values, clean_context_dependent_outliers, clean_dtypes, clean_target_leakage
 
 def run_cleaning_pipeline(data):
     """Run the complete cleaning pipeline in correct order"""
