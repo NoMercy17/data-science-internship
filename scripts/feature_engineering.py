@@ -7,7 +7,7 @@ warnings.filterwarnings('ignore')
 
 class HotelFeatureExtractor:
     """
-    Complete hotel booking feature engineering pipeline
+    Complete hotel booking feature engineering pipeline - UPDATED VERSION
     """
     
     def __init__(self, output_dir='/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'):
@@ -142,8 +142,8 @@ class HotelFeatureExtractor:
         distribution_channel_str = df_behavior['distribution_channel'].astype(str)
         
         df_behavior['is_business_likely'] = (
-            (market_segment_str == 'Corporate') | 
-            (distribution_channel_str == 'Corporate') |
+            (market_segment_str.str.contains('Corporate', case=False, na=False)) | 
+            (distribution_channel_str.str.contains('Corporate', case=False, na=False)) |
             (df_behavior['stays_in_week_nights'] > df_behavior['stays_in_weekend_nights'])
         ).astype(int)
         
@@ -192,7 +192,7 @@ class HotelFeatureExtractor:
         data_risk['total_booking_value'] = data_risk['adr'] * data_risk['total_stay_nights']
         data_risk['revenue_per_person'] = data_risk['total_booking_value'] / (data_risk['party_size'] + 1)
         
-        # 5. Price Category
+        # 5. Price Category (SINGLE VERSION - removed duplicate)
         data_risk['price_category'] = pd.cut(
             data_risk['adr'], 
             bins=[0, 75, 150, 300, float('inf')], 
@@ -221,133 +221,225 @@ class HotelFeatureExtractor:
             np.where(deposit_str == 'Non Refund', 'Low', 'Medium')
         )
         
-        # 9. Waiting list risk
-        data_risk['waiting_list_risk'] = (data_risk['days_in_waiting_list'] > 0).astype(int)
-        
-        # 10. Price per night category
-        data_risk['price_per_night_category'] = np.where(
-            data_risk['adr'] <= 50, 'Very_Low',
-            np.where(data_risk['adr'] <= 100, 'Low',
-                     np.where(data_risk['adr'] <= 200, 'Medium', 'High'))
-        )
-        
         return data_risk
     
+    def handle_high_cardinality_features(self, data):
+        """Handle high cardinality features by grouping rare categories"""
+        data_processed = data.copy()
+        
+        # Handle agent column (already processed with NaN for unknown/rare)
+        if 'agent' in data_processed.columns:
+            # Check the data type and handle accordingly
+            print(f"Agent column dtype: {data_processed['agent'].dtype}")
+            print(f"Agent column unique values: {data_processed['agent'].unique()}")
+            
+            # Convert to string first to handle mixed types, then fill NaN
+            data_processed['agent_grouped'] = data_processed['agent'].astype(str).replace('nan', 'No_Agent')
+            
+            # If there are actual NaN values, handle them
+            if data_processed['agent'].isna().any():
+                data_processed['agent_grouped'] = data_processed['agent_grouped'].fillna('No_Agent')
+            
+            print(f"Agent column: {data_processed['agent'].nunique()} unique values -> {data_processed['agent_grouped'].nunique()} after handling NaN")
+        else:
+            data_processed['agent_grouped'] = 'No_Agent'
+        
+        # Handle company column (not present in dataset)
+        data_processed['company_grouped'] = 'No_Company'
+        print("Company column: Not present in dataset")
+        
+        # Handle country column (group rare countries < 0.1% as 'Other')
+        if 'country' in data_processed.columns:
+            total_records = len(data_processed)
+            country_counts = data_processed['country'].value_counts()
+            country_percentages = country_counts / total_records * 100
+            
+            # Countries with less than 0.1% frequency
+            rare_countries = country_percentages[country_percentages < 0.1].index
+            
+            data_processed['country_grouped'] = data_processed['country'].apply(
+                lambda x: 'Other' if x in rare_countries else x
+            )
+            print(f"Country column: {len(country_counts)} unique values -> {data_processed['country_grouped'].nunique()} after grouping")
+            print(f"Grouped {len(rare_countries)} countries with < 0.1% frequency as 'Other'")
+        else:
+            data_processed['country_grouped'] = 'Unknown'
+        
+        # Add features based on grouped columns
+        data_processed['has_agent'] = (data_processed['agent_grouped'] != 'No_Agent').astype(int)
+        data_processed['has_company'] = (data_processed['company_grouped'] != 'No_Company').astype(int)
+        
+        # Drop original high cardinality columns
+        columns_to_drop = ['agent', 'company', 'country']
+        for col in columns_to_drop:
+            if col in data_processed.columns:
+                data_processed = data_processed.drop(columns=[col])
+        
+        return data_processed
+
     def extract_market_features(self, data):
-        """Extract market and distribution features"""
+        """Extract market features based on ACTUAL data, not assumptions"""
         data_market = data.copy()
         
         # Convert categorical columns to string for comparison
         distribution_channel_str = data_market['distribution_channel'].astype(str)
         market_segment_str = data_market['market_segment'].astype(str)
         
-        # 1. Online vs Offline booking
-        data_market['is_online_booking'] = (
-            distribution_channel_str.isin(['TA/TO', 'Direct', 'Online TA'])
-        ).astype(int)
+        # STEP 1: INSPECT YOUR ACTUAL DATA
+        print("=== ACTUAL DATA INSPECTION ===")
+        print("Distribution channels found:", distribution_channel_str.unique())
+        print("Distribution channel counts:")
+        print(distribution_channel_str.value_counts())
+        print("\nMarket segments found:", market_segment_str.unique())
+        print("Market segment counts:")
+        print(market_segment_str.value_counts())
         
-        # 2. Agent involvement
-        if 'agent' in data_market.columns:
-            data_market['has_agent'] = (~data_market['agent'].isna()).astype(int)
+        # STEP 2: ANALYZE CANCELLATION RATES BY CATEGORY (if you have is_canceled)
+        if 'is_canceled' in data_market.columns:
+            print("\n=== CANCELLATION ANALYSIS ===")
+            print("Cancellation rates by distribution channel:")
+            channel_cancel_rates = data_market.groupby('distribution_channel')['is_canceled'].agg(['mean', 'count']).round(3)
+            print(channel_cancel_rates)
+            
+            print("\nCancellation rates by market segment:")
+            segment_cancel_rates = data_market.groupby('market_segment')['is_canceled'].agg(['mean', 'count']).round(3)
+            print(segment_cancel_rates)
+        
+        # STEP 3: CREATE RISK CATEGORIES BASED ON YOUR ACTUAL DATA
+        # For now, let's work with what we know exists:
+        
+        # Distribution Channel Risk (based on your actual channels)
+        actual_channels = distribution_channel_str.unique()
+        print(f"\nWorking with actual channels: {actual_channels}")
+        
+        def categorize_channel_risk_actual(channel):
+            """Categorize based on your actual distribution channels"""
+            if channel == 'TA/TO':
+                return 'High_Risk'  # Travel agents typically higher risk
+            elif channel == 'Direct':
+                return 'Low_Risk'   # Direct bookings more committed
+            elif channel == 'GDS':  # Only include if it actually exists
+                return 'Medium_Risk'
+            else:
+                return 'Unknown_Risk'
+        
+        # Only create risk categories if we have the channel
+        if 'GDS' in actual_channels:
+            print("GDS found in data - including in risk categorization")
+            data_market['distribution_channel_risk'] = distribution_channel_str.apply(categorize_channel_risk_actual)
         else:
-            data_market['has_agent'] = 0
+            print("GDS NOT found in data - using simplified categorization")
+            def categorize_channel_risk_simple(channel):
+                if channel == 'TA/TO':
+                    return 'High_Risk'
+                elif channel == 'Direct':
+                    return 'Low_Risk'
+                else:
+                    return 'Medium_Risk'  # Anything else gets medium risk
+            
+            data_market['distribution_channel_risk'] = distribution_channel_str.apply(categorize_channel_risk_simple)
         
-        # 3. Company involvement
-        if 'company' in data_market.columns:
-            data_market['has_company'] = (~data_market['company'].isna()).astype(int)
-        else:
-            data_market['has_company'] = 0
+        # Market Segment Risk (based on your actual segments)
+        actual_segments = market_segment_str.unique()
+        print(f"Working with actual segments: {actual_segments}")
         
-        # 4. Market segment risk
-        high_risk_segments = ['Online TA', 'Offline TA/TO']
+        def categorize_market_segment_risk_actual(segment):
+            """Categorize based on your actual market segments"""
+            if segment == 'Groups':
+                return 'High_Risk'
+            elif segment in ['Offline TA/TO', 'Online TA']:
+                return 'Medium_Risk'
+            elif segment in ['Corporate', 'Direct', 'Complementary']:
+                return 'Low_Risk'
+            else:
+                return 'Medium_Risk'  # Default for unknown segments
+        
+        data_market['market_segment_risk'] = market_segment_str.apply(categorize_market_segment_risk_actual)
+        
+        # Create binary indicators for backward compatibility
         data_market['high_risk_segment'] = (
-            market_segment_str.isin(high_risk_segments)
+            data_market['market_segment_risk'] == 'High_Risk'
         ).astype(int)
         
-        # 5. Distribution channel risk
-        high_risk_channels = ['TA/TO']
         data_market['high_risk_channel'] = (
-            distribution_channel_str.isin(high_risk_channels)
+            data_market['distribution_channel_risk'] == 'High_Risk'
         ).astype(int)
+        
+        # Other features...
+        data_market['is_online_booking'] = (
+            distribution_channel_str == 'Direct'
+        ).astype(int)
+        
+        data_market['is_travel_agent_booking'] = (
+            distribution_channel_str == 'TA/TO'
+        ).astype(int)
+        
+        data_market['is_direct_booking'] = (
+            distribution_channel_str == 'Direct'
+        ).astype(int)
+        
+        data_market['is_corporate_booking'] = (
+            (distribution_channel_str == 'Corporate') |
+            (market_segment_str == 'Corporate')
+        ).astype(int)
+        
+        data_market['is_group_booking'] = (
+            market_segment_str == 'Groups'
+        ).astype(int)
+        
+        # Print final risk distribution
+        print("\n=== FINAL RISK CATEGORIZATION ===")
+        print("Distribution Channel Risk:")
+        print(data_market['distribution_channel_risk'].value_counts())
+        print("\nMarket Segment Risk:")
+        print(data_market['market_segment_risk'].value_counts())
         
         return data_market
     
-    def handle_high_cardinality_features(self, data):
-        """Handle high cardinality categorical features"""
-        df = data.copy()
-        
-        # Handle 'agent' - group rare agents
-        if 'agent' in df.columns:
-            agent_counts = df['agent'].value_counts()
-            top_agents = agent_counts.head(10).index
-            df['agent_grouped'] = df['agent'].apply(
-                lambda x: x if x in top_agents else 'Other'
-            )
-        else:
-            df['agent_grouped'] = 'Other'
-        
-        # Handle 'company' - group rare companies
-        if 'company' in df.columns:
-            company_counts = df['company'].value_counts()
-            top_companies = company_counts.head(10).index
-            df['company_grouped'] = df['company'].apply(
-                lambda x: x if x in top_companies else 'Other'
-            )
-        else:
-            df['company_grouped'] = 'Other'
-        
-        # Handle 'country' - group by region or top countries
-        if 'country' in df.columns:
-            country_counts = df['country'].value_counts()
-            top_countries = country_counts.head(15).index
-            df['country_grouped'] = df['country'].apply(
-                lambda x: x if x in top_countries else 'Other'
-            )
-        else:
-            df['country_grouped'] = 'Other'
-        
-        return df
+    # Keep the original method name as an alias for backward compatibility
+    def extract_market_features_data_driven(self, data):
+        """Alias for extract_market_features - for backward compatibility"""
+        return self.extract_market_features(data)
     
     def encode_categorical_variables(self, data):
         """
         Encode categorical variables using both label encoding and one-hot encoding
-        
-        One-hot encoding creates dummy variables:
-        - meal column with values ['BB', 'HB', 'FB', 'SC'] becomes:
-          meal_HB, meal_FB, meal_SC (meal_BB is dropped to avoid multicollinearity)
-        - Each new column contains 0 or 1 indicating presence of that category
         """
         df = data.copy()
         
-        # Binary categorical columns -label encoding (0, 1)
+        # Binary categorical columns - label encoding (0, 1)
         binary_categorical = [
             'hotel', 'is_repeated_guest', 'customer_type'
         ]
         
         # Use one-hot encoding (create dummy variables)
-        # Columns like: meal_HB, meal_FB, meal_SC, market_segment_Corporate
         onehot_categorical = [
             'meal', 'market_segment', 'distribution_channel', 'deposit_type',
             'reserved_room_type', 'assigned_room_type', 'booking_season',
             'lead_time_category', 'customer_experience_level', 'cancellation_tendency',
-            'avg_stay_preference', 'price_category', 'deposit_risk',
-            'price_per_night_category'
+            'avg_stay_preference', 'price_category', 'deposit_risk'
         ]
         
-        # High cardinality categorical columns -label encoding (0, 1, 2, 3, ...)
+        # Label encoding for remaining categorical columns
         label_categorical = [
-            'agent_grouped', 'company_grouped', 'country_grouped', 'arrival_date_month'
+            'arrival_date_month'
         ]
+        
+        # Add grouped columns created by handle_high_cardinality_features
+        if 'agent_grouped' in df.columns:
+            label_categorical.append('agent_grouped')
+        if 'company_grouped' in df.columns:
+            label_categorical.append('company_grouped')
+        if 'country_grouped' in df.columns:
+            label_categorical.append('country_grouped')
         
         # Label Encoding 
-        # This converts categories to numbers: 'City Hotel' -> 0, 'Resort Hotel' -> 1
         for col in binary_categorical + label_categorical:
             if col in df.columns:
                 le = LabelEncoder()
                 df[col] = le.fit_transform(df[col].astype(str))
                 self.label_encoders[col] = le
                 print(f"Label encoded {col}: {dict(zip(le.classes_, le.transform(le.classes_)))}")
-        
         
         # One-hot encoding with dummies
         created_dummies = []
@@ -357,8 +449,7 @@ class HotelFeatureExtractor:
                 unique_values = df[col].unique()
                 print(f"Creating dummy variables for {col}: {unique_values}")
                 
-                # Create dummy variables (one-hot encoding)
-                # drop_first=True removes one category to avoid multicollinearity
+                # Create dummy variables (drop_first=True to avoid multicollinearity)
                 dummies = pd.get_dummies(df[col], prefix=col, drop_first=True)
                 created_dummies.extend(dummies.columns.tolist())
                 
@@ -376,26 +467,39 @@ class HotelFeatureExtractor:
     
     def run_complete_feature_engineering(self, data):
         """
-        Complete feature engineering pipeline
+        Complete feature engineering pipeline - UPDATED VERSION
         """
-        # Step 1: Extract temporal features
-        df = self.extract_temporal_features(data)
+        print("Starting feature engineering pipeline...")
         
-        # Step 2: Extract customer behavior features
+        # First, let's examine the actual unique values in key columns
+        print("\n=== DATA INSPECTION ===")
+        key_columns = ['distribution_channel', 'market_segment']
+        for col in key_columns:
+            if col in data.columns:
+                print(f"{col} unique values: {data[col].unique()}")
+        
+        # Step 1: Handle high cardinality features
+        print("\n=== HANDLING HIGH CARDINALITY FEATURES ===")
+        df = self.handle_high_cardinality_features(data)
+        
+        # Step 2: Extract temporal features
+        print("\n=== TEMPORAL FEATURES ===")
+        df = self.extract_temporal_features(df)
+        
+        # Step 3: Extract customer behavior features
+        print("\n=== CUSTOMER BEHAVIOR FEATURES ===")
         df = self.extract_customer_behavior_features(df)
         
-        # Step 3: Extract booking risk features
+        # Step 4: Extract booking risk features
+        print("\n=== BOOKING RISK FEATURES ===")
         df = self.extract_booking_risk_features(df)
         
-        # Step 4: Extract market features
+        # Step 5: Extract market features
+        print("\n=== MARKET FEATURES ===")
         df = self.extract_market_features(df)
         
-        # Step 5: Handle high cardinality features
-        df = self.handle_high_cardinality_features(df)
-        
         # Step 6: Encode categorical variables
-        df = self.encode_categorical_variables(df)
-        
+        print("\n=== CATEGORICAL ENCODING ===")
         df = self.encode_categorical_variables(df)
         
         # Original numerical features
@@ -409,9 +513,16 @@ class HotelFeatureExtractor:
         
         # Original categorical features (now encoded)
         encoded_categorical = [
-            'hotel', 'is_repeated_guest', 'customer_type', 'agent_grouped', 
-            'company_grouped', 'country_grouped', 'arrival_date_month'
+            'hotel', 'is_repeated_guest', 'customer_type', 'arrival_date_month'
         ]
+        
+        # Add grouped columns if they exist
+        if 'agent_grouped' in df.columns:
+            encoded_categorical.append('agent_grouped')
+        if 'company_grouped' in df.columns:
+            encoded_categorical.append('company_grouped')
+        if 'country_grouped' in df.columns:
+            encoded_categorical.append('country_grouped')
         
         # Target variable
         target_feature = ['is_canceled'] if 'is_canceled' in df.columns else []
@@ -429,11 +540,14 @@ class HotelFeatureExtractor:
         
         risk_features = [
             'room_type_mismatch', 'changes_per_night', 'adr_per_person', 'total_booking_value',
-            'revenue_per_person', 'has_special_requirements', 'booking_complexity', 'waiting_list_risk'
+            'revenue_per_person', 'has_special_requirements', 'booking_complexity'
         ]
         
+        # UPDATED market features
         market_features = [
-            'is_online_booking', 'has_agent', 'has_company', 'high_risk_segment', 'high_risk_channel'
+            'is_online_booking', 'has_agent', 'has_company', 'high_risk_segment', 
+            'high_risk_channel', 'is_travel_agent_booking', 'is_group_booking',
+            'is_corporate_booking', 'is_direct_booking'  # Added new features
         ]
         
         # Combine all numerical features
@@ -445,7 +559,7 @@ class HotelFeatureExtractor:
             'meal', 'market_segment', 'distribution_channel', 'deposit_type',
             'reserved_room_type', 'assigned_room_type', 'booking_season',
             'lead_time_category', 'customer_experience_level', 'cancellation_tendency',
-            'avg_stay_preference', 'price_category', 'deposit_risk', 'price_per_night_category'
+            'avg_stay_preference', 'price_category', 'deposit_risk'
         ])]
         
         # Combine all features
@@ -477,7 +591,7 @@ class HotelFeatureExtractor:
         info_path = os.path.join(self.output_dir, 'feature_info.pkl')
         pd.to_pickle(self.feature_info, info_path)
         
-        print("Feature engineering completed!")
+        print("\n=== FEATURE ENGINEERING COMPLETED ===")
         print(f"Total features: {self.feature_info['total_features']}")
         print(f"Numerical features: {self.feature_info['numerical_features']}")
         print(f"One-hot encoded features: {self.feature_info['onehot_features']}")
