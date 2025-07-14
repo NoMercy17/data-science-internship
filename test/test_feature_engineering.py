@@ -2,7 +2,10 @@
 import os
 import pandas as pd
 from scripts.feature_engineering import HotelFeatureExtractor
-
+import numpy as np
+import warnings
+from sklearn.preprocessing import LabelEncoder
+warnings.filterwarnings('ignore')
 # Configuration
 input_path = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/cleaned/final_cleaned_data.pkl'
 output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
@@ -274,11 +277,7 @@ if __name__ == "__main__":
         data = pd.read_csv(input_path)
     
     # Run the feature engineering pipelineimport pandas as pd
-import numpy as np
-import os
-import warnings
-from sklearn.preprocessing import LabelEncoder
-warnings.filterwarnings('ignore')
+
 
 class HotelFeatureExtractor:
     """
