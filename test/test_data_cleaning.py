@@ -73,6 +73,10 @@ def run_cleaning_pipeline(data):
     final_output_path = os.path.join(output_dir, 'final_cleaned_data.csv')
     data.to_csv(final_output_path, index=False)
     print(f"Final cleaned data saved to: {final_output_path}")
+
+    final_output_path = os.path.join(output_dir, 'final_cleaned_data.pkl')
+    data.to_pickle(final_output_path)
+    print(f"Data with preserved dtypes saved to: {final_output_path}")
     
     print("\n" + "="*60)
     print("DATA CLEANING PIPELINE COMPLETED SUCCESSFULLY")

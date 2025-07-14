@@ -222,7 +222,7 @@ def clean_infrequent_values(data):
     # Lead time  
     if 'lead_time' in data.columns:
         current_max = data['lead_time'].max()
-        if current_max > 300:  
+        if current_max > 365:  
             cap_value = data['lead_time'].quantile(0.95)
             mask = data['lead_time'] > cap_value
             if mask.sum() > 0:
@@ -329,13 +329,14 @@ def clean_context_dependent_outliers(data):
     return data
 
 def clean_dtypes(data):
-    """7. Handle data types and save result"""
-    
+    """
+    IMPROVED dtype cleaning function with proper categorical preservation
+    """
     print("Cleaning data types...")
     
     # Handle date-related columns
     if 'arrival_date_month' in data.columns:
-        data['arrival_date_month'] = data['arrival_date_month'].str.title()
+        data['arrival_date_month'] = data['arrival_date_month'].astype(str).str.title()
     
     # Handle reservation_status_date
     if 'reservation_status_date' in data.columns:
@@ -346,24 +347,6 @@ def clean_dtypes(data):
     for col in binary_columns:
         if col in data.columns:
             data[col] = pd.to_numeric(data[col], errors='coerce').fillna(0).astype('int8')
-    
-    # Categorical columns
-    categorical_columns = {
-        'hotel': lambda x: x.str.title(),
-        'meal': lambda x: x.str.upper(),
-        'country': lambda x: x.str.upper(),
-        'market_segment': lambda x: x,
-        'distribution_channel': lambda x: x,
-        'reserved_room_type': lambda x: x.str.upper(),
-        'assigned_room_type': lambda x: x.str.upper(),
-        'deposit_type': lambda x: x.str.title(),
-        'customer_type': lambda x: x.str.title(),
-        'reservation_status': lambda x: x.str.title()
-    }
-    
-    for col, transform_func in categorical_columns.items():
-        if col in data.columns:
-            data[col] = transform_func(data[col])
     
     # Integer columns
     integer_columns = [
@@ -391,24 +374,57 @@ def clean_dtypes(data):
             non_null_mask = numeric_series.notna()
             if non_null_mask.any():
                 numeric_series.loc[non_null_mask] = numeric_series.loc[non_null_mask].round()
-            
+                        
             try:
                 data[col] = numeric_series.astype('Int64')
             except (TypeError, ValueError) as e:
                 print(f"Warning: Could not convert {col} to Int64, keeping as float64. Error: {e}")
                 data[col] = numeric_series.astype('float64')
     
-    # Convert to category for memory efficiency
+    # Categorical columns processing
+    categorical_columns = {
+        'hotel': lambda x: x.astype(str).str.title(),
+        'meal': lambda x: x.astype(str).str.upper(),
+        'country': lambda x: x.astype(str).str.upper(),
+        'market_segment': lambda x: x.astype(str),
+        'distribution_channel': lambda x: x.astype(str),
+        'reserved_room_type': lambda x: x.astype(str).str.upper(),
+        'assigned_room_type': lambda x: x.astype(str).str.upper(),
+        'deposit_type': lambda x: x.astype(str).str.title(),
+        'customer_type': lambda x: x.astype(str).str.title(),
+        'reservation_status': lambda x: x.astype(str).str.title()
+    }
+    
+    for col, transform_func in categorical_columns.items():
+        if col in data.columns:
+            try:
+                data[col] = transform_func(data[col])
+            except Exception as e:
+                print(f"Warning: Could not transform {col}. Error: {e}")
+                data[col] = data[col].astype(str)
+    
+    # Convert to category for memory efficiency 
     category_columns = ['hotel', 'meal', 'country', 'market_segment', 'distribution_channel',
                        'reserved_room_type', 'assigned_room_type', 'deposit_type',
-                       'customer_type', 'reservation_status']
+                       'customer_type', 'reservation_status', 'arrival_date_month']
+    
     for col in category_columns:
         if col in data.columns:
-            data[col] = data[col].astype('category')
+            try:
+                # First ensure it's string type, then convert to category
+                data[col] = data[col].astype(str).astype('category')
+                print(f"✓ Converted {col} to category with {data[col].nunique()} unique values")
+            except Exception as e:
+                print(f"Warning: Could not convert {col} to category. Error: {e}")
     
-    # Save to file
-    output_path = os.path.join(output_dir, '07_dtypes_cleaned.csv')
-    data.to_csv(output_path, index=False)
+    # Print final dtypes to verify
+    print("\nFinal data types:")
+    print(data.dtypes)
+    
+    # preserve data types
+    pickle_path = os.path.join(output_dir, '07_dtypes_cleaned.pkl')
+    data.to_pickle(pickle_path)
+    print(f"Data with preserved dtypes saved to: {pickle_path}")
     
     return data
 
@@ -513,7 +529,8 @@ def clean_target_leakage(data):
         print("No columns with perfect target correlation found")
     
     # Save to file
-    output_path = os.path.join(output_dir, '08_target_leakage_cleaned.csv')
-    data.to_csv(output_path, index=False)
+    pickle_path = os.path.join(output_dir, '08_target_leakage_cleaned.pkl')
+    data.to_pickle(pickle_path)
+    print(f"Data with preserved dtypes saved to: {pickle_path}")
     
     return data
