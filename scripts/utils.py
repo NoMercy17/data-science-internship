@@ -1,5 +1,8 @@
 import pandas as pd
-import numpy as np
+
+# Used for checking on which columns i need to do the scalling, etc
+
+
 
 # Load your data
 data_path = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results/feature_engineered_data.pkl'
