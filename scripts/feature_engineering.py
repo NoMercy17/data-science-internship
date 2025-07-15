@@ -4,7 +4,6 @@ import os
 import warnings
 from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.preprocessing import KBinsDiscretizer
-import pickle
 warnings.filterwarnings('ignore')
 
 class HotelFeatureExtractor:
