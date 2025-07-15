@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import numpy as np
 from scripts.feature_engineering import HotelFeatureExtractor
 import warnings
 warnings.filterwarnings('ignore')
@@ -25,7 +24,7 @@ def test_feature_engineering_pipeline():
     else:
         original_data = pd.read_csv(input_path)
     
-    print(f"✅ Data loaded successfully!")
+    print("✅ Data loaded successfully!")
     
     # ============================================================================
     # BEFORE FEATURE ENGINEERING
@@ -37,11 +36,11 @@ def test_feature_engineering_pipeline():
     print(f"📊 Original Data Shape: {original_data.shape}")
     print(f"📝 Total Original Columns: {len(original_data.columns)}")
     
-    print(f"\n📋 Original Column Names:")
+    print("\n📋 Original Column Names:")
     for i, col in enumerate(original_data.columns, 1):
         print(f"  {i:2d}. {col}")
     
-    print(f"\n📝 Categorical Columns:")
+    print("\n📝 Categorical Columns:")
     categorical_cols = original_data.select_dtypes(include=['object', 'category']).columns.tolist()
     for col in categorical_cols:
         unique_count = original_data[col].nunique()
@@ -195,14 +194,14 @@ def test_feature_engineering_pipeline():
     print("📈 TRANSFORMATION SUMMARY")
     print("="*60)
     
-    print(f"\n📋 Feature Engineering Results:")
+    print("\n📋 Feature Engineering Results:")
     print(f"  • Original Features: {len(original_data.columns)}")
     print(f"  • Features After Engineering: {len(engineered_data.columns)}")
     print(f"  • New Features Created: {len(new_features)}")
     print(f"  • Features Removed/Transformed: {len(removed_features)}")
     print(f"  • Growth Factor: {len(engineered_data.columns) / len(original_data.columns):.2f}x")
     
-    print(f"\n💾 Data Types After Engineering:")
+    print("\n💾 Data Types After Engineering:")
     dtype_counts_after = engineered_data.dtypes.value_counts()
     for dtype, count in dtype_counts_after.items():
         print(f"  • {dtype}: {count} columns")
