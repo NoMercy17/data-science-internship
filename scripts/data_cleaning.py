@@ -12,13 +12,13 @@ os.makedirs(output_dir, exist_ok=True)
 
 def clean_missing_values(data):
     """1. Clean missing values and save result"""
-    drop_threshold = 0.5
+    drop_threshold = 0.3
     
     # Drop columns with excessive missing values
     columns_to_drop = [col for col in data.columns if data[col].isnull().mean() > drop_threshold]
     if columns_to_drop:
         data = data.drop(columns=columns_to_drop)
-        print(f"Dropped {len(columns_to_drop)} columns with >50% missing values: {columns_to_drop}")
+        print(f"Dropped {len(columns_to_drop)} columns with >30% missing values: {columns_to_drop}")
     
     # Fill missing values
     fill_values = {}
@@ -222,7 +222,7 @@ def clean_infrequent_values(data):
     # Lead time  
     if 'lead_time' in data.columns:
         current_max = data['lead_time'].max()
-        if current_max > 365:  
+        if current_max > 300:  
             cap_value = data['lead_time'].quantile(0.95)
             mask = data['lead_time'] > cap_value
             if mask.sum() > 0:
@@ -428,10 +428,17 @@ def clean_dtypes(data):
     
     return data
 
+
 def clean_target_leakage(data):
-    """8. Detect and remove columns that have perfect correlation with target variable (is_canceled)"""
+    """
+    Detect and remove columns that have correlation with target variable (is_canceled) 
+    above the specified threshold (default 0.2)
+    """
     
-    print("Detecting target leakage...")
+
+    correlation_threshold=0.2
+    
+    print(f"Detecting target leakage with correlation threshold: {correlation_threshold}...")
     
     if 'is_canceled' not in data.columns:
         print("Warning: Target variable 'is_canceled' not found in data")
@@ -441,8 +448,9 @@ def clean_target_leakage(data):
     
     target = data['is_canceled']
     columns_to_remove = []
+    correlation_results = []  # Store results for reporting
     
-    # Check each column for perfect correlation with target
+    # Check each column for correlation with target
     for col in data.columns:
         if col == 'is_canceled':
             continue
@@ -469,37 +477,77 @@ def clean_target_leakage(data):
                     
                 correlation = np.corrcoef(col_filled, target_filled)[0, 1]
                 
-                # Check for perfect correlation (both exact and floating point precision)
-                if not np.isnan(correlation) and (abs(correlation) == 1.0 or abs(correlation) > 0.999):
+                # Check for correlation above threshold
+                if not np.isnan(correlation) and abs(correlation) >= correlation_threshold:
                     columns_to_remove.append(col)
-                    print(f"Found perfect correlation ({correlation:.6f}) between {col} and target")
+                    correlation_results.append({
+                        'column': col,
+                        'type': 'numeric',
+                        'correlation': correlation,
+                        'abs_correlation': abs(correlation)
+                    })
+                    print(f"Found high correlation ({correlation:.6f}) between {col} and target")
             
             # For categorical columns
             elif 'category' in dtype_str.lower() or dtype_str == 'object':
-                # Check if there's a perfect one-to-one mapping
-                if data[col].notna().sum() > 0:
-                    # Group by categorical column and calculate mean target for each category
-                    grouped = data.groupby(data[col].astype(str), dropna=False)['is_canceled'].agg(['mean', 'count'])
+                # Calculate correlation using point-biserial correlation for categorical vs binary
+                try:
+                    # Create dummy variables for categorical column
+                    dummies = pd.get_dummies(data[col], prefix=col, dummy_na=True)
                     
-                    # If mean is 0.0 or 1.0, it means ALL instances of that 
-                    # category have the same target value (perfect predictability)
-                    perfect_mapping = grouped['mean'].isin([0.0, 1.0]).all()
+                    # Calculate correlation for each dummy variable
+                    max_correlation = 0
+                    best_category = None
                     
-                    # Also check if the mapping is deterministic in both directions
-                    if perfect_mapping:
-                        # Check if each target value maps to unique categories
-                        reverse_grouped = data.groupby('is_canceled')[col].nunique()
-                        total_unique_values = data[col].nunique()
+                    for dummy_col in dummies.columns:
+                        dummy_correlation = np.corrcoef(dummies[dummy_col], target)[0, 1]
+                        if not np.isnan(dummy_correlation) and abs(dummy_correlation) > abs(max_correlation):
+                            max_correlation = dummy_correlation
+                            best_category = dummy_col
+                    
+                    # Check if maximum correlation exceeds threshold
+                    if abs(max_correlation) >= correlation_threshold:
+                        columns_to_remove.append(col)
+                        correlation_results.append({
+                            'column': col,
+                            'type': 'categorical',
+                            'correlation': max_correlation,
+                            'abs_correlation': abs(max_correlation),
+                            'best_category': best_category
+                        })
+                        print(f"Found high categorical correlation ({max_correlation:.6f}) between {col} and target (via {best_category})")
+                
+                except Exception as e:
+                    print(f"Warning: Could not calculate categorical correlation for {col}: {e}")
+                    
+                    # Fallback: Check for perfect mapping (original logic)
+                    if data[col].notna().sum() > 0:
+                        # Group by categorical column and calculate mean target for each category
+                        grouped = data.groupby(data[col].astype(str), dropna=False)['is_canceled'].agg(['mean', 'count'])
                         
-                        # If sum of unique values per target class equals 
-                        # total unique values, there's no overlap (perfect separation)
-                        if reverse_grouped.sum() == total_unique_values:
-                            columns_to_remove.append(col)
-                            print(f"Found perfect categorical mapping between {col} and target")
+                        # Check if any category has mean >= threshold or <= (1-threshold)
+                        # This indicates strong predictive power
+                        extreme_mapping = (grouped['mean'] >= (1 - correlation_threshold)) | (grouped['mean'] <= correlation_threshold)
+                        
+                        if extreme_mapping.any():
+                            # Calculate a pseudo-correlation based on the most extreme category
+                            most_extreme_mean = grouped['mean'].iloc[np.argmax(np.abs(grouped['mean'] - 0.5))]
+                            pseudo_correlation = abs(most_extreme_mean - 0.5) * 2  # Scale to [0,1]
+                            
+                            if pseudo_correlation >= correlation_threshold:
+                                columns_to_remove.append(col)
+                                correlation_results.append({
+                                    'column': col,
+                                    'type': 'categorical_fallback',
+                                    'correlation': most_extreme_mean,
+                                    'abs_correlation': pseudo_correlation,
+                                    'extreme_categories': grouped[extreme_mapping].index.tolist()
+                                })
+                                print(f"Found high categorical mapping between {col} and target (pseudo-correlation: {pseudo_correlation:.6f})")
             
             # Special check for reservation_status which is likely to be leaky
             if col == 'reservation_status':
-                # Check if 'Canceled' status perfectly predicts cancellation
+                # Check if 'Canceled' status has high correlation
                 unique_values = data[col].astype(str).unique()
                 if any('cancel' in str(val).lower() for val in unique_values):
                     # Find the canceled status value
@@ -508,29 +556,98 @@ def clean_target_leakage(data):
                     for canceled_val in canceled_values:
                         canceled_status_mask = data[col].astype(str) == str(canceled_val)
                         if canceled_status_mask.sum() > 0:
-                            # Check if all 'Canceled' reservations have is_canceled = 1
-                            if (data.loc[canceled_status_mask, 'is_canceled'] == 1).all():
-                                # And check if all is_canceled = 1 have 'Canceled' status
-                                canceled_target_mask = data['is_canceled'] == 1
-                                if (data.loc[canceled_target_mask, col].astype(str) == str(canceled_val)).all():
+                            # Calculate correlation between this status and target
+                            status_correlation = np.corrcoef(canceled_status_mask.astype(int), target)[0, 1]
+                            
+                            if abs(status_correlation) >= correlation_threshold:
+                                if col not in columns_to_remove:  # Avoid duplicates
                                     columns_to_remove.append(col)
-                                    print(f"Found perfect leakage in {col} - '{canceled_val}' status perfectly predicts target")
-                                    break
+                                    correlation_results.append({
+                                        'column': col,
+                                        'type': 'special_reservation_status',
+                                        'correlation': status_correlation,
+                                        'abs_correlation': abs(status_correlation),
+                                        'leaky_value': canceled_val
+                                    })
+                                print(f"Found high leakage in {col} - '{canceled_val}' status has correlation {status_correlation:.6f} with target")
+                                break
         
         except Exception as e:
             print(f"Warning: Could not check correlation for column {col}: {e}")
             continue
     
+    # ============================================================================
+    # DETAILED REPORTING
+    # ============================================================================
+    print("\n" + "="*80)
+    print("TARGET LEAKAGE DETECTION RESULTS")
+    print("="*80)
+    
+    if correlation_results:
+        print(f"\nFound {len(correlation_results)} columns with correlation >= {correlation_threshold}:")
+        
+        # Sort by absolute correlation (highest first)
+        correlation_results.sort(key=lambda x: x['abs_correlation'], reverse=True)
+        
+        print(f"\n{'Column':<25} {'Type':<20} {'Correlation':<12} {'Details':<30}")
+        print("-" * 87)
+        
+        for result in correlation_results:
+            details = ""
+            if result['type'] == 'categorical' and 'best_category' in result:
+                details = f"via {result['best_category']}"
+            elif result['type'] == 'categorical_fallback' and 'extreme_categories' in result:
+                details = f"extreme cats: {len(result['extreme_categories'])}"
+            elif result['type'] == 'special_reservation_status' and 'leaky_value' in result:
+                details = f"leaky value: {result['leaky_value']}"
+            
+            print(f"{result['column']:<25} {result['type']:<20} {result['correlation']:<12.6f} {details:<30}")
+        
+        # Group by correlation strength
+        perfect_corr = [r for r in correlation_results if r['abs_correlation'] >= 0.99]
+        very_high_corr = [r for r in correlation_results if 0.8 <= r['abs_correlation'] < 0.99]
+        high_corr = [r for r in correlation_results if 0.5 <= r['abs_correlation'] < 0.8]
+        moderate_corr = [r for r in correlation_results if correlation_threshold <= r['abs_correlation'] < 0.5]
+        
+        print(f"\n📊 Correlation Strength Distribution:")
+        if perfect_corr:
+            print(f"  • Perfect (>=0.99): {len(perfect_corr)} columns")
+        if very_high_corr:
+            print(f"  • Very High (0.8-0.99): {len(very_high_corr)} columns")
+        if high_corr:
+            print(f"  • High (0.5-0.8): {len(high_corr)} columns")
+        if moderate_corr:
+            print(f"  • Moderate ({correlation_threshold}-0.5): {len(moderate_corr)} columns")
+        
+        # Show feature types
+        numeric_features = [r for r in correlation_results if r['type'] == 'numeric']
+        categorical_features = [r for r in correlation_results if r['type'] in ['categorical', 'categorical_fallback']]
+        special_features = [r for r in correlation_results if r['type'] == 'special_reservation_status']
+        
+        print(f"\n🔍 Feature Type Distribution:")
+        if numeric_features:
+            print(f"  • Numeric: {len(numeric_features)} columns")
+        if categorical_features:
+            print(f"  • Categorical: {len(categorical_features)} columns")
+        if special_features:
+            print(f"  • Special (reservation_status): {len(special_features)} columns")
+    
     # Remove leaky columns
     if columns_to_remove:
+        # Remove duplicates while preserving order
+        columns_to_remove = list(dict.fromkeys(columns_to_remove))
+        
         data = data.drop(columns=columns_to_remove)
-        print(f"Removed {len(columns_to_remove)} columns with target leakage: {columns_to_remove}")
+        print(f"\n✅ Removed {len(columns_to_remove)} columns with correlation >= {correlation_threshold}")
+        print(f"Removed columns: {columns_to_remove}")
     else:
-        print("No columns with perfect target correlation found")
+        print(f"\n✅ No columns with correlation >= {correlation_threshold} found")
+    
+    print(f"\n📊 Data shape after target leakage removal: {data.shape}")
     
     # Save to file
     pickle_path = os.path.join(output_dir, '08_target_leakage_cleaned.pkl')
     data.to_pickle(pickle_path)
-    print(f"Data with preserved dtypes saved to: {pickle_path}")
+    print(f"📁 Data with preserved dtypes saved to: {pickle_path}")
     
     return data
