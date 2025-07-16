@@ -65,6 +65,13 @@ def run_cleaning_pipeline(data):
     print("="*50)
     data = clean_target_leakage(data)
     print(f"After target leakage cleaning: {data.shape}")
+
+    # Step 9: Cler multicollinearity
+    print("\n" + "="*50)
+    print("STEP 9: CLEANING MULTICOLLINEARITY")
+    print("="*50)
+    data = clean_target_leakage(data)
+    print(f"After MULTICOLLINEARITY: {data.shape}")
     
     # Final save
     print("\n" + "="*50)

@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 from scripts.feature_engineering import HotelFeatureExtractor
 import warnings
@@ -6,7 +5,7 @@ warnings.filterwarnings('ignore')
 
 def test_feature_engineering_pipeline():
     """
-    Simple test to show before/after feature engineering transformations
+    Test the feature engineering pipeline with clear before/after comparison
     """
     
     # Configuration
@@ -17,224 +16,170 @@ def test_feature_engineering_pipeline():
     print("FEATURE ENGINEERING PIPELINE TEST")
     print("="*80)
     
-    # Load original data
-    print("\n📁 Loading original data...")
-    if input_path.endswith('.pkl'):
-        original_data = pd.read_pickle(input_path)
-    else:
-        original_data = pd.read_csv(input_path)
-    
-    print("✅ Data loaded successfully!")
-    
-    # ============================================================================
-    # BEFORE FEATURE ENGINEERING
-    # ============================================================================
-    print("\n" + "="*60)
-    print("🔍 BEFORE FEATURE ENGINEERING")
-    print("="*60)
-    
-    print(f"📊 Original Data Shape: {original_data.shape}")
-    print(f"📝 Total Original Columns: {len(original_data.columns)}")
-    
-    print("\n📋 Original Column Names:")
-    for i, col in enumerate(original_data.columns, 1):
-        print(f"  {i:2d}. {col}")
-    
-    print("\n📝 Categorical Columns:")
-    categorical_cols = original_data.select_dtypes(include=['object', 'category']).columns.tolist()
-    for col in categorical_cols:
-        unique_count = original_data[col].nunique()
-        print(f"  • {col} ({unique_count} unique values)")
+    # Load data
+    try:
+        if input_path.endswith('.pkl'):
+            original_data = pd.read_pickle(input_path)
+        else:
+            original_data = pd.read_csv(input_path)
+        print(f"📁 Data loaded: {original_data.shape}")
+    except Exception as e:
+        print(f"❌ Error loading data: {e}")
+        return None
     
     # ============================================================================
     # RUN FEATURE ENGINEERING
     # ============================================================================
-    print("\n" + "="*60)
-    print("⚙️  RUNNING FEATURE ENGINEERING PIPELINE")
-    print("="*60)
+    print("\n⚙️  Running feature engineering...")
     
-    # Initialize feature extractor
-    extractor = HotelFeatureExtractor(output_dir=output_dir)
-    
-    # Create a copy to avoid modifying original
-    data_copy = original_data.copy()
-    
-    # Step-by-step feature engineering
-    print("\n🔄 Step 1: Handling high cardinality features...")
-    data_copy = extractor.handle_high_cardinality_features(data_copy)
-    
-    print("🔄 Step 2: Extracting temporal features...")
-    data_copy = extractor.extract_temporal_features(data_copy)
-    
-    print("🔄 Step 3: Extracting customer behavior features...")
-    data_copy = extractor.extract_customer_behavior_features(data_copy)
-    
-    print("🔄 Step 4: Extracting booking risk features...")
-    data_copy = extractor.extract_booking_risk_features(data_copy)
-    
-    print("🔄 Step 5: Extracting market features...")
-    data_copy = extractor.extract_market_features(data_copy)
-    
-    print("🔄 Step 6: Encoding categorical variables...")
-    engineered_data = extractor.encode_categorical_variables(data_copy)
+    try:
+        # Initialize feature extractor
+        extractor = HotelFeatureExtractor(output_dir=output_dir)
+        
+        # Run complete pipeline
+        engineered_data = extractor.run_complete_feature_engineering(
+            data=original_data.copy(),
+            apply_scaling=True,
+            scaling_method='standard'
+        )
+        
+    except Exception as e:
+        print(f"❌ Error during feature engineering: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
     
     # ============================================================================
-    # AFTER FEATURE ENGINEERING
+    # BEFORE vs AFTER COMPARISON
     # ============================================================================
     print("\n" + "="*60)
-    print("✨ AFTER FEATURE ENGINEERING")
+    print("📊 BEFORE vs AFTER COMPARISON")
     print("="*60)
     
-    print(f"📊 Engineered Data Shape: {engineered_data.shape}")
-    print(f"📝 Total Engineered Columns: {len(engineered_data.columns)}")
-    print(f"📈 New Features Created: {len(engineered_data.columns) - len(original_data.columns)}")
+    print("\n📈 Dataset Shape:")
+    print(f"  • Original: {original_data.shape}")
+    print(f"  • Final:    {engineered_data.shape}")
+    print(f"  • Change:   +{len(engineered_data.columns) - len(original_data.columns)} features")
+    
+    print("\n📋 Feature Types:")
+    orig_numeric = len(original_data.select_dtypes(include=['int64', 'float64']).columns)
+    orig_categorical = len(original_data.select_dtypes(include=['object', 'category']).columns)
+    final_numeric = len(engineered_data.select_dtypes(include=['int64', 'float64']).columns)
+    final_categorical = len(engineered_data.select_dtypes(include=['object', 'category']).columns)
+    
+    print(f"  • Numeric:     {orig_numeric} → {final_numeric} (+{final_numeric - orig_numeric})")
+    print(f"  • Categorical: {orig_categorical} → {final_categorical} ({final_categorical - orig_categorical:+d})")
     
     # ============================================================================
-    # FEATURE ANALYSIS
+    # FEATURE TRANSFORMATION ANALYSIS
     # ============================================================================
     print("\n" + "="*60)
     print("🔍 FEATURE TRANSFORMATION ANALYSIS")
     print("="*60)
     
-    # Original features that remain
-    original_features_kept = [col for col in original_data.columns if col in engineered_data.columns]
-    print(f"\n✅ Original Features Kept ({len(original_features_kept)}):")
-    for col in original_features_kept:
-        print(f"  • {col}")
-    
-    # Features that were removed/transformed
+    # Analyze what happened to original features
+    kept_features = [col for col in original_data.columns if col in engineered_data.columns]
     removed_features = [col for col in original_data.columns if col not in engineered_data.columns]
-    print(f"\n❌ Original Features Removed/Transformed ({len(removed_features)}):")
-    for col in removed_features:
-        print(f"  • {col}")
-    
-    # New engineered features
     new_features = [col for col in engineered_data.columns if col not in original_data.columns]
-    print(f"\n🆕 New Engineered Features ({len(new_features)}):")
     
-    # Categorize new features
-    temporal_features = [col for col in new_features if any(keyword in col.lower() for keyword in 
-                        ['season', 'quarter', 'weekend', 'holiday', 'lead_time', 'advance', 'last_minute'])]
+    print("\n📊 Feature Changes:")
+    print(f"  • Kept:     {len(kept_features)} features")
+    print(f"  • Removed:  {len(removed_features)} features")
+    print(f"  • Created:  {len(new_features)} features")
     
-    customer_features = [col for col in new_features if any(keyword in col.lower() for keyword in 
-                        ['loyalty', 'party', 'family', 'group', 'children', 'babies', 'business', 'experience', 'stay'])]
-    
-    risk_features = [col for col in new_features if any(keyword in col.lower() for keyword in 
-                    ['risk', 'mismatch', 'changes', 'complexity', 'price', 'adr', 'revenue', 'booking_value'])]
-    
-    market_features = [col for col in new_features if any(keyword in col.lower() for keyword in 
-                      ['online', 'agent', 'company', 'channel', 'segment', 'corporate', 'direct', 'travel'])]
-    
-    dummy_features = [col for col in new_features if '_' in col and any(col.startswith(prefix + '_') for prefix in 
-                     ['meal', 'market_segment', 'distribution_channel', 'deposit_type', 'reserved_room_type', 
-                      'assigned_room_type', 'booking_season', 'lead_time_category', 'customer_experience_level', 
-                      'cancellation_tendency', 'avg_stay_preference', 'price_category', 'deposit_risk'])]
-    
-    grouping_features = [col for col in new_features if 'grouped' in col.lower()]
-    
-    print(f"\n🕒 Temporal Features ({len(temporal_features)}):")
-    for col in temporal_features:
-        print(f"  • {col}")
-    
-    print(f"\n👥 Customer Behavior Features ({len(customer_features)}):")
-    for col in customer_features:
-        print(f"  • {col}")
-    
-    print(f"\n⚠️  Risk Assessment Features ({len(risk_features)}):")
-    for col in risk_features:
-        print(f"  • {col}")
-    
-    print(f"\n🏢 Market Features ({len(market_features)}):")
-    for col in market_features:
-        print(f"  • {col}")
-    
-    if grouping_features:
-        print(f"\n🔗 Grouped Features (High Cardinality Handling) ({len(grouping_features)}):")
-        for col in grouping_features:
+    if removed_features:
+        print(f"\n❌ Removed Features ({len(removed_features)}):")
+        for col in removed_features:
             print(f"  • {col}")
     
-    print(f"\n🏷️  Dummy Variables (One-Hot Encoded) ({len(dummy_features)}):")
-    # Group dummy variables by their prefix
-    dummy_groups = {}
-    for col in dummy_features:
-        prefix = col.split('_')[0] + '_' + col.split('_')[1] if len(col.split('_')) > 1 else col
-        if prefix not in dummy_groups:
-            dummy_groups[prefix] = []
-        dummy_groups[prefix].append(col)
-    
-    for prefix, cols in dummy_groups.items():
-        print(f"  📋 {prefix} ({len(cols)} categories):")
-        for col in cols[:3]:  # Show first 3 categories
-            print(f"    • {col}")
-        if len(cols) > 3:
-            print(f"    ... and {len(cols) - 3} more")
-    
-    # ============================================================================
-    # ENCODING INFORMATION
-    # ============================================================================
-    print("\n" + "="*60)
-    print("🔧 ENCODING TRANSFORMATIONS")
-    print("="*60)
-    
-    if hasattr(extractor, 'label_encoders') and extractor.label_encoders:
-        print(f"\n📊 Label Encoding Applied to ({len(extractor.label_encoders)}) columns:")
-        for col, encoder in extractor.label_encoders.items():
-            classes = encoder.classes_
-            print(f"  • {col}: {len(classes)} categories")
-            if len(classes) <= 8:
-                mapping = dict(zip(classes, encoder.transform(classes)))
-                print(f"    Mapping: {mapping}")
-            else:
-                print(f"    Categories: {classes[:3]}... (showing first 3)")
+    if new_features:
+        print(f"\n🆕 New Features ({len(new_features)}):")
+        # Categorize new features by type
+        feature_categories = {
+            'temporal': ['lead_time', 'advance', 'last_minute', 'normal'],
+            'customer': ['special', 'requirements', 'requests'],
+            'market': ['market_segment', 'online_ta', 'offline_ta', 'groups', 'direct', 'corporate', 'risk_segment'],
+            'deposit': ['deposit', 'refundable', 'non_refund'],
+            'room': ['room_', 'standard', 'premium', 'suite'],
+            'country': ['country_']
+        }
+        
+        categorized_features = {category: [] for category in feature_categories.keys()}
+        uncategorized_features = []
+        
+        for feature in new_features:
+            categorized = False
+            for category, keywords in feature_categories.items():
+                if any(keyword in feature.lower() for keyword in keywords):
+                    categorized_features[category].append(feature)
+                    categorized = True
+                    break
+            if not categorized:
+                uncategorized_features.append(feature)
+        
+        for category, features in categorized_features.items():
+            if features:
+                print(f"  📂 {category.upper()}: {len(features)} features")
+        
+        if uncategorized_features:
+            print(f"  📂 OTHER: {len(uncategorized_features)} features")
     
     # ============================================================================
-    # TRANSFORMATION SUMMARY
+    # SUMMARY STATISTICS
     # ============================================================================
     print("\n" + "="*60)
-    print("📈 TRANSFORMATION SUMMARY")
+    print("📈 FINAL SUMMARY")
     print("="*60)
     
-    print("\n📋 Feature Engineering Results:")
+    print(f"\n📊 Transformation Results:")
     print(f"  • Original Features: {len(original_data.columns)}")
-    print(f"  • Features After Engineering: {len(engineered_data.columns)}")
-    print(f"  • New Features Created: {len(new_features)}")
-    print(f"  • Features Removed/Transformed: {len(removed_features)}")
-    print(f"  • Growth Factor: {len(engineered_data.columns) / len(original_data.columns):.2f}x")
+    print(f"  • Final Features: {len(engineered_data.columns)}")
+    print(f"  • Net Change: +{len(engineered_data.columns) - len(original_data.columns)}")
     
-    print("\n💾 Data Types After Engineering:")
-    dtype_counts_after = engineered_data.dtypes.value_counts()
-    for dtype, count in dtype_counts_after.items():
-        print(f"  • {dtype}: {count} columns")
+    # Memory usage
+    original_memory = original_data.memory_usage(deep=True).sum() / 1024**2  # MB
+    engineered_memory = engineered_data.memory_usage(deep=True).sum() / 1024**2  # MB
     
-    # ============================================================================
-    # SAVE RESULTS (ONLY 2 FILES)
-    # ============================================================================
-    print("\n" + "="*60)
-    print("💾 SAVING RESULTS")
-    print("="*60)
+    print("\n💾 Memory Usage:")
+    print(f"  • Original: {original_memory:.2f} MB")
+    print(f"  • Final:    {engineered_memory:.2f} MB")
+    print(f"  • Change:   {engineered_memory - original_memory:.2f} MB ({((engineered_memory/original_memory - 1) * 100):+.1f}%)")
     
-    # 1. Save engineered data as pickle (preserves data types)
-    pickle_output_path = os.path.join(output_dir, 'feature_engineered_data.pkl')
-    engineered_data.to_pickle(pickle_output_path)
-    print(f"✅ Engineered data saved to: {pickle_output_path}")
+    # Validation
+    validation_passed = True
     
-    # 2. Save CSV for quick inspection
-    csv_output_path = os.path.join(output_dir, 'feature_engineered_data.csv')
-    engineered_data.to_csv(csv_output_path, index=False)
-    print(f"✅ CSV version saved to: {csv_output_path}")
+    if engineered_data.empty:
+        print("\n❌ Dataset is empty!")
+        validation_passed = False
+    elif len(engineered_data.columns) < 5:
+        print("\n❌ Too few features!")
+        validation_passed = False
+    elif engineered_data.select_dtypes(include=['float64']).isin([float('inf'), float('-inf')]).any().any():
+        print("\n❌ Infinite values detected!")
+        validation_passed = False
+    else:
+        print("\n✅ Pipeline validation passed!")
     
-    print("\n" + "="*80)
-    print("✨ FEATURE ENGINEERING PIPELINE TEST COMPLETED SUCCESSFULLY!")
-    print(f"📁 Files saved: {pickle_output_path}, {csv_output_path}")
-    print("="*80)
+    if validation_passed:
+        print("\n🎉 Feature engineering completed successfully!")
+    else:
+        print("\n❌ Feature engineering failed validation!")
     
-    return engineered_data
+    return engineered_data, None
 
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 if __name__ == "__main__":
     try:
-        engineered_data = test_feature_engineering_pipeline()
-        print(f"\n🎉 Success! Final engineered dataset shape: {engineered_data.shape}")
+        engineered_data, summary = test_feature_engineering_pipeline()
+        
+        if engineered_data is not None:
+            print("\n🎊 Feature engineering pipeline completed!")
+        else:
+            print("\n❌ Feature engineering pipeline failed!")
+            
     except Exception as e:
-        print(f"\n❌ Error occurred: {str(e)}")
+        print(f"\n❌ Pipeline execution failed: {e}")
         import traceback
         traceback.print_exc()
