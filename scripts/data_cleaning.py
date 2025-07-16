@@ -696,7 +696,7 @@ def clean_multicollinearity(data):
                         vif_score = variance_inflation_factor(vif_data.values, i)
                         if not np.isnan(vif_score) and not np.isinf(vif_score):
                             vif_scores.append((feature, vif_score))
-                    except:
+                    except Exception:
                         continue
                 
                 if not vif_scores:
