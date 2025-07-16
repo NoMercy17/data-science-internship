@@ -609,7 +609,7 @@ def clean_target_leakage(data):
         high_corr = [r for r in correlation_results if 0.5 <= r['abs_correlation'] < 0.8]
         moderate_corr = [r for r in correlation_results if correlation_threshold <= r['abs_correlation'] < 0.5]
         
-        print(f"\n📊 Correlation Strength Distribution:")
+        print("\n📊 Correlation Strength Distribution:")
         if perfect_corr:
             print(f"  • Perfect (>=0.99): {len(perfect_corr)} columns")
         if very_high_corr:
@@ -624,7 +624,7 @@ def clean_target_leakage(data):
         categorical_features = [r for r in correlation_results if r['type'] in ['categorical', 'categorical_fallback']]
         special_features = [r for r in correlation_results if r['type'] == 'special_reservation_status']
         
-        print(f"\n🔍 Feature Type Distribution:")
+        print("\n🔍 Feature Type Distribution:")
         if numeric_features:
             print(f"  • Numeric: {len(numeric_features)} columns")
         if categorical_features:
