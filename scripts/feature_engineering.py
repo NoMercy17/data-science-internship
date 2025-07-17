@@ -449,12 +449,12 @@ class HotelFeatureExtractor:
         print("\n=== SAVING RESULTS ===")
 
        
-        pickle_output_path = os.path.join(self.output_dir, 'target_leakage_aware_features.pkl')
+        pickle_output_path = os.path.join(self.output_dir, 'feature_engineering_results.pkl')
         data.to_pickle(pickle_output_path)
         print(f"✅ Engineered data saved to: {pickle_output_path}")
         
         
-        csv_output_path = os.path.join(self.output_dir, 'target_leakage_aware_features.csv')
+        csv_output_path = os.path.join(self.output_dir, 'feature_engineering_results.csv')
         data.to_csv(csv_output_path, index=False)
         print(f"✅ CSV version saved to: {csv_output_path}")
                 
