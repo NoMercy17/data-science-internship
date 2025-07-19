@@ -1,0 +1,19 @@
+=== TUNED RANDOM FOREST MODEL RESULTS ===
+
+Accuracy:  0.8548
+Precision: 0.8481
+Recall:    0.7490
+F1-Score:  0.7955
+ROC-AUC:   0.9199
+
+Top 10 Most Important Features:
+country_PRT: 0.0726
+reservation_status_date_days_since_ref: 0.0646
+deposit_risk_low: 0.0513
+reservation_status_date_day_of_year: 0.0495
+has_deposit: 0.0457
+reservation_status_date_week_of_year: 0.0414
+market_segment_online_ta: 0.0403
+deposit_risk_high: 0.0400
+reservation_status_date_day: 0.0393
+has_non_refund_deposit: 0.0383

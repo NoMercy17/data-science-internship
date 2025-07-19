@@ -1,0 +1,19 @@
+=== DEFAULT RANDOM FOREST MODEL RESULTS ===
+
+Accuracy:  0.8513
+Precision: 0.8220
+Recall:    0.7729
+F1-Score:  0.7967
+ROC-AUC:   0.9193
+
+Top 10 Most Important Features:
+country_PRT: 0.0875
+has_non_refund_deposit: 0.0729
+deposit_risk_low: 0.0709
+deposit_risk_high: 0.0684
+market_segment_online_ta: 0.0540
+has_deposit: 0.0496
+is_last_minute_lead_time: 0.0487
+reservation_status_date_days_since_ref: 0.0472
+lead_time_risk_score: 0.0386
+has_special_requirements: 0.0350
