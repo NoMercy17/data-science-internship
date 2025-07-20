@@ -3,25 +3,24 @@ import numpy as np
 import os
 import pickle
 import warnings
-warnings.filterwarnings('ignore')
+import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import SelectKBest, f_classif, RFE
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, 
-    classification_report, confusion_matrix, roc_auc_score, roc_curve
+    classification_report, confusion_matrix, roc_auc_score,
 )
-from sklearn.utils.class_weight import compute_class_weight
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
-from sklearn.pipeline import Pipeline
+
+warnings.filterwarnings('ignore')
+
 
 # Visualization
-import matplotlib.pyplot as plt
-import seaborn as sns
+
 
 class HotelBookingPredictor:
     def __init__(self, output_dir):
