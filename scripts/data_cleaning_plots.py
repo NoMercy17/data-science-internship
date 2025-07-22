@@ -208,7 +208,7 @@ class DataCleaningVisualizer:
             for j in range(len(selected_cols), 6):
                 axes[j].set_visible(False)
             
-            plt.suptitle('Statistical Outliers: Before vs After Cleaning (Columns with Changes)', 
+            plt.suptitle('Statistical Outliers: Before vs After Cleaning ', 
                         fontsize=16, fontweight='bold')
             plt.tight_layout()
             plt.savefig(os.path.join(self.plots_dir, 'outliers_before_after.png'), dpi=300, bbox_inches='tight')
@@ -253,81 +253,38 @@ class DataCleaningVisualizer:
             print(f"Error creating data types plot: {e}")
     
     def plot_target_correlation_analysis(self):
-        """Plot correlation with target before and after leakage removal"""
+        """Plot correlation matrix"""
         try:
-            before_data = self.load_data(('07_dtypes_cleaned.pkl', 'Before Leakage'))
-            after_data = self.load_data(('08_target_leakage_cleaned.pkl', 'After Leakage'))
+            data = self.load_data(('07_dtypes_cleaned.pkl', 'Correlation Matrix'))
             
-            if 'is_canceled' not in before_data.columns:
+            if 'is_canceled' not in data.columns:
                 print("Target variable 'is_canceled' not found")
                 return
             
-            # Calculate correlations for numeric columns
-            before_numeric = before_data.select_dtypes(include=[np.number])
-            after_numeric = after_data.select_dtypes(include=[np.number])
+            # Calculate correlation matrix
+            numeric_data = data.select_dtypes(include=[np.number])
+            corr_matrix = numeric_data.corr()
             
-            before_corr = before_numeric.corr()['is_canceled'].drop('is_canceled').sort_values(key=abs, ascending=False)
-            after_corr = after_numeric.corr()['is_canceled'].drop('is_canceled').sort_values(key=abs, ascending=False)
+            # Create figure
+            fig, ax = plt.subplots(figsize=(12, 10))
             
-            # Get top correlations - take all remaining columns for after (should be 8 or so)
-            top_before = before_corr.head(10)
-            top_after = after_corr  # Show all remaining columns
-            
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 10))
-            
-            # Before leakage removal
-            colors_before = ['red' if abs(x) > 0.5 else 'orange' if abs(x) > 0.2 else 'green' for x in top_before.values]
-            bars1 = ax1.barh(range(len(top_before)), top_before.values, color=colors_before)
-            ax1.set_yticks(range(len(top_before)))
-            ax1.set_yticklabels(top_before.index, fontsize=11)
-            ax1.set_title('Top Correlations with Target - Before Leakage Removal', fontsize=14, fontweight='bold', pad=20)
-            ax1.set_xlabel('Correlation with is_canceled')
-            ax1.grid(True, alpha=0.3)
-            ax1.set_xlim(-1, 1)  # Set consistent x-axis range
-            
-            # Add value labels with better positioning
-            for i, (bar, val) in enumerate(zip(bars1, top_before.values)):
-                x_pos = val + 0.02 if val > 0 else val - 0.02
-                ha_align = 'left' if val > 0 else 'right'
-                ax1.text(x_pos, i, f'{val:.3f}', va='center', ha=ha_align, fontweight='bold')
-            
-            # After leakage removal - show all remaining columns
-            colors_after = ['red' if abs(x) > 0.5 else 'orange' if abs(x) > 0.2 else 'green' for x in top_after.values]
-            bars2 = ax2.barh(range(len(top_after)), top_after.values, color=colors_after)
-            ax2.set_yticks(range(len(top_after)))
-            ax2.set_yticklabels(top_after.index, fontsize=11)
-            ax2.set_title('All Feature Correlations with Target - After Leakage Removal', fontsize=14, fontweight='bold', pad=20)
-            ax2.set_xlabel('Correlation with is_canceled')
-            ax2.grid(True, alpha=0.3)
-            ax2.set_xlim(-1, 1)  # Set consistent x-axis range
-            
-            # Add value labels with better positioning
-            for i, (bar, val) in enumerate(zip(bars2, top_after.values)):
-                x_pos = val + 0.02 if val > 0 else val - 0.02
-                ha_align = 'left' if val > 0 else 'right'
-                ax2.text(x_pos, i, f'{val:.3f}', va='center', ha=ha_align, fontweight='bold')
-            
-            # Add legend with better positioning
-            from matplotlib.patches import Patch
-            legend_elements = [Patch(facecolor='red', label='High correlation (>0.5)'),
-                             Patch(facecolor='orange', label='Medium correlation (0.2-0.5)'),
-                             Patch(facecolor='green', label='Low correlation (<0.2)')]
-            
-            # Position legend outside the plot area
-            ax1.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.02, 1))
+            # Plot correlation matrix
+            mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+            sns.heatmap(corr_matrix, mask=mask, annot=True, fmt='.2f', 
+                    cmap='RdBu_r', center=0, square=True, linewidths=0.5,
+                    cbar_kws={"shrink": .8}, ax=ax)
+            ax.set_title('Correlation Matrix', 
+                        fontsize=14, fontweight='bold', pad=20)
             
             plt.tight_layout()
-            plt.subplots_adjust(top=0.9)  # Add space at the top for titles
-            plt.savefig(os.path.join(self.plots_dir, 'target_correlation_analysis.png'), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(self.plots_dir, 'correlation_matrix.png'), 
+                    dpi=300, bbox_inches='tight')
             plt.show()
             
-            # Print summary
-            print(f"Before leakage removal: {len(before_corr)} features")
-            print(f"After leakage removal: {len(after_corr)} features")
-            print(f"Features removed: {len(before_corr) - len(after_corr)}")
+            print(f"Features: {corr_matrix.shape[0]}")
             
         except Exception as e:
-            print(f"Error creating correlation plot: {e}")
+            print(f"Error creating correlation matrix: {e}")
     
     def plot_multicollinearity_analysis(self):
         """Plot correlation heatmap before and after multicollinearity removal"""

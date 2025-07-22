@@ -329,8 +329,6 @@ def clean_context_dependent_outliers(data):
             data.loc[prev_cancel_not_repeat, 'is_repeated_guest'] = 1
             print(f"Fixed {affected_count} guests with previous cancellations not marked as repeated")
     
-    # REMOVED: Parking spaces exceed adults (too aggressive)
-    # REMOVED: Booking changes exceed lead time (too aggressive)
     
     print(f"After context outliers: {data.shape}")
     
