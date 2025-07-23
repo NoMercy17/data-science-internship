@@ -253,39 +253,128 @@ class DataCleaningVisualizer:
             print(f"Error creating data types plot: {e}")
     
     def plot_target_correlation_analysis(self):
-        """Plot correlation matrix"""
+        """Plot correlation analysis for the actual remaining features after target leakage removal"""
         try:
-            data = self.load_data(('07_dtypes_cleaned.pkl', 'Correlation Matrix'))
+            data = self.load_data(('08_target_leakage_cleaned.pkl', 'After Target Leakage'))
             
             if 'is_canceled' not in data.columns:
                 print("Target variable 'is_canceled' not found")
                 return
             
-            # Calculate correlation matrix
-            numeric_data = data.select_dtypes(include=[np.number])
-            corr_matrix = numeric_data.corr()
+            print(f"Available columns: {list(data.columns)}")
+            print(f"Data shape: {data.shape}")
             
-            # Create figure
-            fig, ax = plt.subplots(figsize=(12, 10))
+            # Identify different column types
+            numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+            categorical_cols = data.select_dtypes(include=['object', 'category']).columns.tolist()
             
-            # Plot correlation matrix
-            mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
-            sns.heatmap(corr_matrix, mask=mask, annot=True, fmt='.2f', 
-                    cmap='RdBu_r', center=0, square=True, linewidths=0.5,
-                    cbar_kws={"shrink": .8}, ax=ax)
-            ax.set_title('Correlation Matrix', 
-                        fontsize=14, fontweight='bold', pad=20)
+
+            
+            # Remove target from numeric columns for analysis
+            if 'is_canceled' in numeric_cols:
+                numeric_cols.remove('is_canceled')
+            
+            print(f"Numeric columns: {numeric_cols}")
+            print(f"Categorical columns: {categorical_cols}")
+            
+            # Create figure with 2 subplots for numeric and categorical features
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+            
+            # 1. Numeric Features Correlation
+            if numeric_cols:
+                numeric_data = data[numeric_cols + ['is_canceled']]
+                target_corr = numeric_data.corr()['is_canceled'].drop('is_canceled')
+                
+                # Plot numeric correlations
+                colors = ['#2ecc71' if x > 0 else '#e74c3c' for x in target_corr.values]
+                bars = ax1.barh(range(len(target_corr)), target_corr.values, color=colors, alpha=0.7)
+                ax1.set_yticks(range(len(target_corr)))
+                ax1.set_yticklabels(target_corr.index, fontsize=12)
+                ax1.set_xlabel('Correlation with Target', fontsize=12)
+                ax1.set_title('Numeric Features Correlation with Target', fontsize=14, fontweight='bold')
+                ax1.grid(True, alpha=0.3, axis='x')
+                ax1.axvline(x=0, color='black', linewidth=1)
+                
+                # Add value labels
+                for i, (bar, value) in enumerate(zip(bars, target_corr.values)):
+                    ax1.text(value + (0.01 if value >= 0 else -0.01), i, f'{value:.3f}', 
+                            ha='left' if value >= 0 else 'right', va='center', fontsize=10, fontweight='bold')
+            else:
+                ax1.text(0.5, 0.5, 'No numeric features\nfound for correlation', 
+                        ha='center', va='center', transform=ax1.transAxes, fontsize=14)
+                ax1.set_title('Numeric Features Correlation', fontsize=14, fontweight='bold')
+            
+            # 2. Categorical Features Analysis
+            if categorical_cols:
+                # Calculate association with target for categorical variables (using Chi-square or Cramér's V)
+                from scipy.stats import chi2_contingency
+                
+                categorical_associations = {}
+                for col in categorical_cols:
+                    if col != 'is_canceled':
+                        try:
+                            # Create contingency table
+                            contingency = pd.crosstab(data[col], data['is_canceled'])
+                            chi2, p_value, dof, expected = chi2_contingency(contingency)
+                            
+                            # Calculate Cramér's V (association strength)
+                            n = contingency.sum().sum()
+                            cramers_v = np.sqrt(chi2 / (n * (min(contingency.shape) - 1)))
+                            categorical_associations[col] = cramers_v
+                        except:
+                            categorical_associations[col] = 0
+                
+                if categorical_associations:
+                    # Sort by association strength
+                    sorted_assoc = dict(sorted(categorical_associations.items(), 
+                                            key=lambda x: x[1], reverse=True))
+                    
+                    # Plot categorical associations
+                    colors_cat = plt.cm.viridis(np.linspace(0, 1, len(sorted_assoc)))
+                    bars_cat = ax2.barh(range(len(sorted_assoc)), list(sorted_assoc.values()), 
+                                    color=colors_cat, alpha=0.7)
+                    ax2.set_yticks(range(len(sorted_assoc)))
+                    ax2.set_yticklabels(list(sorted_assoc.keys()), fontsize=12)
+                    ax2.set_xlabel("Association with Target", fontsize=12)
+                    ax2.set_title('Categorical Features Association with Target', fontsize=14, fontweight='bold')
+                    ax2.grid(True, alpha=0.3, axis='x')
+                    
+                    # Add value labels
+                    for i, (bar, value) in enumerate(zip(bars_cat, sorted_assoc.values())):
+                        ax2.text(value + 0.01, i, f'{value:.3f}', 
+                                ha='left', va='center', fontsize=10, fontweight='bold')
+            else:
+                ax2.text(0.5, 0.5, 'No categorical features\nfound for analysis', 
+                        ha='center', va='center', transform=ax2.transAxes, fontsize=14)
+                ax2.set_title('Categorical Features Association', fontsize=14, fontweight='bold')
+
             
             plt.tight_layout()
-            plt.savefig(os.path.join(self.plots_dir, 'correlation_matrix.png'), 
+            plt.savefig(os.path.join(self.plots_dir, 'target_correlation_analysis.png'), 
                     dpi=300, bbox_inches='tight')
             plt.show()
             
-            print(f"Features: {corr_matrix.shape[0]}")
+            # Print detailed summary
+            print("\n=== FEATURE ANALYSIS SUMMARY ===")
+            print(f"Dataset shape: {data.shape}")
+            print("Target variable: is_canceled")
+            print(f"Cancellation rate: {data['is_canceled'].mean()*100:.1f}%")
+            
+            if numeric_cols:
+                print("\nNumeric Features Correlation:")
+                for feature, corr in target_corr.sort_values(key=abs, ascending=False).items():
+                    print(f"  {feature}: {corr:.3f} ({abs(corr)*100:.1f}% strength)")
+            
+            if categorical_cols and categorical_associations:
+                print("\nCategorical Features Association (Cramér's V):")
+                for feature, assoc in sorted(categorical_associations.items(), key=lambda x: x[1], reverse=True):
+                    print(f"  {feature}: {assoc:.3f} ({assoc*100:.1f}% strength)")
             
         except Exception as e:
-            print(f"Error creating correlation matrix: {e}")
-    
+            print(f"Error creating target correlation analysis: {e}")
+            import traceback
+            traceback.print_exc()
+
     def plot_multicollinearity_analysis(self):
         """Plot correlation heatmap before and after multicollinearity removal"""
         try:
