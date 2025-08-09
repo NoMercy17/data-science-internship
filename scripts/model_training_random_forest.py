@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
-output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/models'
+output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
 os.makedirs(output_dir, exist_ok=True)
 
 def load_cleaned_data():

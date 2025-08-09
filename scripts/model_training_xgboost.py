@@ -496,7 +496,7 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     
     # Create plots directory if it doesn't exist
-    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/plots'
+    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
     os.makedirs(plots_dir, exist_ok=True)
     
     predictor = XGBoostHotelBookingPredictor(output_dir)

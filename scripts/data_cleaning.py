@@ -577,10 +577,10 @@ def clean_target_leakage(data):
     if columns_to_remove:
         columns_to_remove = list(dict.fromkeys(columns_to_remove))
         data = data.drop(columns=columns_to_remove)
-        print(f"\n✅ Removed {len(columns_to_remove)} columns")
+        print(f"\n Removed {len(columns_to_remove)} columns")
         print(f"Removed columns: {columns_to_remove}")
     else:
-        print("\n✅ No columns to remove")
+        print("\n No columns to remove")
     
     print(f"After target leakage: {data.shape}")
     
@@ -656,9 +656,9 @@ def clean_multicollinearity(data):
                     print(f"  • {feature1} vs {feature2}: r={corr_value:.3f} → Remove {feature2} (lower variance: {var2:.6f})")
     
     if not highly_correlated_pairs:
-        print("  ✅ No highly correlated feature pairs found")
+        print("   No highly correlated feature pairs found")
     else:
-        print(f"  ⚠️  Found {len(highly_correlated_pairs)} highly correlated pairs")
+        print(f"   Found {len(highly_correlated_pairs)} highly correlated pairs")
     
     # === STEP 2: VIF ANALYSIS ===
     print(f"\n2. Variance Inflation Factor Analysis (threshold: {vif_threshold})")
@@ -714,16 +714,16 @@ def clean_multicollinearity(data):
                     break
             
             if not vif_features_to_remove:
-                print("  ✅ No features with high VIF found")
+                print("  No features with high VIF found")
             else:
-                print(f"  ⚠️  Removed {len(vif_features_to_remove)} features due to high VIF")
+                print(f"   Removed {len(vif_features_to_remove)} features due to high VIF")
         
         except ImportError:
-            print("  ⚠️  statsmodels not available. Skipping VIF analysis.")
+            print("   statsmodels not available. Skipping VIF analysis.")
             print("  Install with: pip install statsmodels")
             vif_features_to_remove = set()
         except Exception as e:
-            print(f"  ⚠️  Error in VIF calculation: {e}")
+            print(f"   Error in VIF calculation: {e}")
             vif_features_to_remove = set()
     
     # === STEP 3: REMOVE MULTICOLLINEAR FEATURES ===
@@ -736,19 +736,11 @@ def clean_multicollinearity(data):
         
         data_clean = data_clean.drop(columns=list(all_features_to_remove))
     else:
-        print("\n3. ✅ No multicollinear features to remove")
+        print("\n3. No multicollinear features to remove")
     
     # Add target back if it existed
     if target is not None:
         data_clean['is_canceled'] = target
-    
-    # === STEP 4: FINAL SUMMARY ===
-    print("\n=== MULTICOLLINEARITY SUMMARY ===")
-    print(f"Original numeric features: {len(numeric_columns)}")
-    print(f"Removed due to correlation: {len(features_to_remove)}")
-    print(f"Removed due to VIF: {len(vif_features_to_remove)}")
-    print(f"Final features: {data_clean.shape[1]}")
-    print(f"Final data shape: {data_clean.shape}")
     
     # Save to file
     pickle_path = os.path.join(output_dir, '09_multicollinearity_cleaned.pkl')

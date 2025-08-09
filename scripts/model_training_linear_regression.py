@@ -393,7 +393,7 @@ class HotelBookingPredictor:
 
 # Usage
 if __name__ == "__main__":
-    output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/models'
+    output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
     os.makedirs(output_dir, exist_ok=True)
     
     predictor = HotelBookingPredictor(output_dir)
