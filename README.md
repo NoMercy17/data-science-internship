@@ -9,6 +9,12 @@ Model training with multiple algorithms (Random Forest, XGBoost, etc.)
 Initial Flask API for model serving
 Docker containerization for deployment
 
+API Endpoints atm
+/ - View processed dataset overview
+/health - Service health check
+/api/data - Get dataset as JSON
+/files - Debug file structure
+
 IN DEVELOPMENT
 
 Interactive web interface for predictions
