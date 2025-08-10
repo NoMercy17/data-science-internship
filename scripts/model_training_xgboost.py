@@ -2,7 +2,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score, 
-    classification_report, confusion_matrix, roc_auc_score, roc_curve
+    classification_report, confusion_matrix, roc_auc_score
 )
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
@@ -10,7 +10,6 @@ import xgboost as xgb
 
 # Visualization
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 import numpy as np
 import os
@@ -30,14 +29,14 @@ class XGBoostHotelBookingPredictor:
         
     def load_cleaned_data(self):
         """Load preprocessed data"""
-        input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
+        input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/preprocessors'
         
-        pickle_file = os.path.join(input_dir, 'feature_engineering_results.pkl')
+        pickle_file = os.path.join(input_dir, 'engineered_data.pkl')
         if os.path.exists(pickle_file):
             print(f"Loading data from {pickle_file}")
             data = pd.read_pickle(pickle_file)
         else:
-            csv_file = os.path.join(input_dir, 'feature_engineering_results.csv')
+            csv_file = os.path.join(input_dir, 'engineered_data.csv')
             if os.path.exists(csv_file):
                 print(f"Loading data from {csv_file}")
                 data = pd.read_csv(csv_file)
@@ -93,10 +92,7 @@ class XGBoostHotelBookingPredictor:
         return X, y
     
     def progressive_feature_selection(self, X_train, y_train, X_test, y_test):
-        """
-        Implement progressive feature selection approach using XGBoost
-        Start with most important features and gradually add more
-        """
+       
         print("\n=== PROGRESSIVE FEATURE SELECTION WITH XGBOOST ===")
         
         # Step 1: Get initial feature importance using XGBoost
@@ -350,70 +346,7 @@ class XGBoostHotelBookingPredictor:
                     f'{value:.3f}', ha='center', va='bottom')
         
         plt.tight_layout()
-        plt.savefig(os.path.join('/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/plots', 'model_xgboost_results.png'), 
-                dpi=300, bbox_inches='tight')
-        plt.show()
-    
-    def plot_xgboost_specific_analysis(self, model, X_test, y_test, selected_features):
-        """Plot XGBoost-specific analysis"""
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-        
-        # Plot 1: Feature importance (horizontal bar chart)
-        ax1 = axes[0, 0]
-        if self.feature_importance is not None:
-            top_20 = self.feature_importance.head(20)
-            ax1.barh(range(len(top_20)), top_20['importance'], color='lightgreen')
-            ax1.set_yticks(range(len(top_20)))
-            ax1.set_yticklabels(top_20['feature'])
-            ax1.set_title('Top 20 XGBoost Feature Importance')
-            ax1.set_xlabel('Importance Score')
-            ax1.invert_yaxis()
-        
-        # Plot 2: ROC Curve
-        ax2 = axes[0, 1]
-        X_test_final = X_test[selected_features]
-        y_pred_proba = model.predict_proba(X_test_final)[:,1]
-        fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-        auc_score = roc_auc_score(y_test, y_pred_proba)
-        
-        ax2.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {auc_score:.3f})')
-        ax2.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-        ax2.set_xlim([0.0, 1.0])
-        ax2.set_ylim([0.0, 1.05])
-        ax2.set_xlabel('False Positive Rate')
-        ax2.set_ylabel('True Positive Rate')
-        ax2.set_title('XGBoost ROC Curve')
-        ax2.legend(loc="lower right")
-        ax2.grid(True, alpha=0.3)
-        
-        # Plot 3: Prediction probability distribution
-        ax3 = axes[1, 0]
-        y_pred_proba = model.predict_proba(X_test_final)[:,1]
-        
-        # Separate probabilities by actual class
-        prob_canceled = y_pred_proba[y_test == 1]
-        prob_not_canceled = y_pred_proba[y_test == 0]
-        
-        ax3.hist(prob_not_canceled, bins=50, alpha=0.7, label='Not Canceled', color='blue', density=True)
-        ax3.hist(prob_canceled, bins=50, alpha=0.7, label='Canceled', color='red', density=True)
-        ax3.set_xlabel('Predicted Probability of Cancellation')
-        ax3.set_ylabel('Density')
-        ax3.set_title('XGBoost Prediction Probability Distribution')
-        ax3.legend()
-        ax3.grid(True, alpha=0.3)
-        
-        # Plot 4: Confusion matrix heatmap
-        ax4 = axes[1, 1]
-        y_pred = model.predict(X_test_final)
-        cm = confusion_matrix(y_test, y_pred)
-        
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax4)
-        ax4.set_title('XGBoost Confusion Matrix')
-        ax4.set_xlabel('Predicted')
-        ax4.set_ylabel('Actual')
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join('/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/plots', 'xgboost_detailed_analysis.png'), 
+        plt.savefig(os.path.join('/home/antonios/Desktop/Practica_de_vara/data-science-internship/models_plots', 'model_xgboost_results.png'), 
                 dpi=300, bbox_inches='tight')
         plt.show()
     
@@ -451,7 +384,6 @@ class XGBoostHotelBookingPredictor:
         
         # Plot results
         self.plot_feature_selection_results(results_df)
-        self.plot_xgboost_specific_analysis(final_model, X_test, y_test, final_features)
         
         # Save results
         results_summary = {
@@ -476,11 +408,11 @@ class XGBoostHotelBookingPredictor:
             index=False
         )
         
-        # Save hyperparameters
-        pd.DataFrame([best_params]).to_csv(
-            os.path.join(self.output_dir, 'xgboost_best_hyperparameters.csv'), 
-            index=False
-        )
+        # atm we don t need these, maybe later
+        # pd.DataFrame([best_params]).to_csv(
+        #     os.path.join(self.output_dir, 'xgboost_best_hyperparameters.csv'), 
+        #     index=False
+        # )
         
         print(f"\nResults saved to: {self.output_dir}")
         print(f"Selected {len(final_features)} features for final model")
@@ -492,11 +424,11 @@ class XGBoostHotelBookingPredictor:
 
 # Usage
 if __name__ == "__main__":
-    output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/models'
+    output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
     os.makedirs(output_dir, exist_ok=True)
     
     # Create plots directory if it doesn't exist
-    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
+    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/models_plots'
     os.makedirs(plots_dir, exist_ok=True)
     
     predictor = XGBoostHotelBookingPredictor(output_dir)

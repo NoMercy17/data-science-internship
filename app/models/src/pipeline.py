@@ -25,7 +25,7 @@ class HotelDataPipeline:
     Includes data cleaning and feature engineering steps.
     """
     
-    def __init__(self, output_dir: str = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'):
+    def __init__(self, output_dir: str = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/preprocessors'):
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -136,7 +136,7 @@ class HotelDataPipeline:
 
 
 def run_hotel_pipeline(data_path: str = None, 
-                       output_dir: str = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models') -> pd.DataFrame:
+                       output_dir: str = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/preprocessors') -> pd.DataFrame:
     if data_path is None:
         data_path = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/raw/hotel_booking_cancellation_prediction.csv'
     

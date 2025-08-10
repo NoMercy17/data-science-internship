@@ -32,14 +32,14 @@ class HotelBookingPredictor:
         
     def load_cleaned_data(self):
         """Load preprocessed data"""
-        input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
+        input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/preprocessors'
         
-        pickle_file = os.path.join(input_dir, 'feature_engineering_results.pkl')
+        pickle_file = os.path.join(input_dir, 'engineered_data.pkl')
         if os.path.exists(pickle_file):
             print(f"Loading data from {pickle_file}")
             data = pd.read_pickle(pickle_file)
         else:
-            csv_file = os.path.join(input_dir, 'feature_engineering_results.csv')
+            csv_file = os.path.join(input_dir, 'engineered_data.csv')
             if os.path.exists(csv_file):
                 print(f"Loading data from {csv_file}")
                 data = pd.read_csv(csv_file)
@@ -323,7 +323,7 @@ class HotelBookingPredictor:
                     f'{value:.3f}', ha='center', va='bottom')
         
         plt.tight_layout()
-        plt.savefig(os.path.join('/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/plots', 'model_linear_regression_results.png'), 
+        plt.savefig(os.path.join('/home/antonios/Desktop/Practica_de_vara/data-science-internship/models_plots', 'model_linear_regression_results.png'), 
                 dpi=300, bbox_inches='tight')
         plt.show()
     

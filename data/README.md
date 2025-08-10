@@ -1,1 +1,1 @@
-# Data Directory\nStore raw and processed data files here.
+# Data Directory\nStore raw files here.

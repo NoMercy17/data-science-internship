@@ -16,7 +16,7 @@ import pickle
 import warnings
 warnings.filterwarnings('ignore')
 
-input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
+
 output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/trained_models'
 os.makedirs(output_dir, exist_ok=True)
 
@@ -24,23 +24,25 @@ def load_cleaned_data():
     """
     Load the cleaned and feature-engineered dataset from either pickle or CSV format.
     """
-    pickle_file = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results/feature_engineering_results.pkl'
+    input_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/app/models/preprocessors'
+        
+    pickle_file = os.path.join(input_dir, 'engineered_data.pkl')
     if os.path.exists(pickle_file):
         print(f"Loading data from {pickle_file}")
         data = pd.read_pickle(pickle_file)
     else:
-        csv_file = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results/feature_engineering_results.csv'
+        csv_file = os.path.join(input_dir, 'engineered_data.csv')
         if os.path.exists(csv_file):
             print(f"Loading data from {csv_file}")
             data = pd.read_csv(csv_file)
         else:
             raise FileNotFoundError("No data files found!")
-    
+        
     print(f"Data loaded successfully: {data.shape}")
     print("Target variable distribution:")
     print(data['is_canceled'].value_counts())
     print(f"Cancellation rate: {data['is_canceled'].mean():.2%}")
-    
+        
     return data
 
 def prepare_features(data):
@@ -368,7 +370,7 @@ def plot_rf_results(model_results, feature_importance, y_test, model_name="Rando
     plt.tight_layout()
     
     # Save the plot
-    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/outputs/plots'
+    plots_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/models_plots'
     os.makedirs(plots_dir, exist_ok=True)
     plt.savefig(os.path.join(plots_dir, 'model_random_forest_results.png'), dpi=300, bbox_inches='tight')
     plt.show()

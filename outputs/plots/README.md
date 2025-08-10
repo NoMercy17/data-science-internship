@@ -1,1 +1,0 @@
-different plots per week(EDA - week1, model comparison - week2)
