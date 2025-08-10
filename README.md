@@ -18,6 +18,4 @@ API Endpoints atm
 IN DEVELOPMENT
 
 Interactive web interface for predictions
-Model performance monitoring
-Advanced feature engineering
 Production deployment pipeline
