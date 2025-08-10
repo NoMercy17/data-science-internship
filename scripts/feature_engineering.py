@@ -366,7 +366,7 @@ class HotelFeatureExtractor:
                 'columns': columns_to_scale
             }
             
-            print(f"✅ Successfully scaled {len(columns_to_scale)} columns using {scaling_method}")
+            print(f" Successfully scaled {len(columns_to_scale)} columns using {scaling_method}")
             
         except Exception as e:
             print(f" Error during scaling: {e}")
@@ -375,7 +375,7 @@ class HotelFeatureExtractor:
         return data_scaled
     
     
-    def run_complete_feature_engineering(self, data, apply_scaling=True, scaling_method='standard'):
+    def run_complete_feature_engineering(self, data, apply_scaling=False, scaling_method='standard'):
         """
         Complete feature engineering pipeline respecting target leakage analysis
         """
@@ -446,16 +446,56 @@ class HotelFeatureExtractor:
             'scalers': list(self.scalers.keys()) if hasattr(self, 'scalers') else []
         }
     
-        print("\n=== SAVING RESULTS ===")
-
-       
-        pickle_output_path = os.path.join(self.output_dir, 'feature_engineering_results.pkl')
-        data.to_pickle(pickle_output_path)
-        print(f"✅ Engineered data saved to: {pickle_output_path}")
+        print("\n=== FEATURE ENGINEERING COMPLETED ===")
         
-        
-        csv_output_path = os.path.join(self.output_dir, 'feature_engineering_results.csv')
-        data.to_csv(csv_output_path, index=False)
-        print(f"✅ CSV version saved to: {csv_output_path}")
-                
         return data
+    
+def extract_temporal_features(data):
+    """Wrapper function for temporal feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_temporal_features(data)
+
+def extract_customer_behavior_features(data):
+    """Wrapper function for customer behavior feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_customer_behavior_features(data)
+
+def extract_market_features(data):
+    """Wrapper function for market feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_market_features(data)
+
+def extract_deposit_features(data):
+    """Wrapper function for deposit feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_deposit_features(data)
+
+def extract_room_features(data):
+    """Wrapper function for room feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_room_features(data)
+
+def extract_country_features(data):
+    """Wrapper function for country feature extraction"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.extract_country_features(data)
+
+def encode_categorical_variables(data):
+    """Wrapper function for categorical variable encoding"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.encode_categorical_variables(data)
+
+def scale_features(data, scaling_method='standard'):
+    """Wrapper function for feature scaling"""
+    feature_extractor = HotelFeatureExtractor()
+    return feature_extractor.scale_features(data, scaling_method)
+
+
+# Example of how to run complete feature engineering
+def run_complete_feature_engineering(data, apply_scaling=True, scaling_method='standard', output_dir=None):
+    
+    if output_dir is None:
+        output_dir = '/home/antonios/Desktop/Practica_de_vara/data-science-internship/data/results'
+    
+    feature_extractor = HotelFeatureExtractor(output_dir=output_dir)
+    return feature_extractor.run_complete_feature_engineering(data, apply_scaling, scaling_method)
